@@ -1,0 +1,13 @@
+.git
+.github
+.venv
+**/__pycache__
+.pytest_cache
+*.egg-info
+config/mlforge.toml
+opencode.json
+secrets
+*.docx
+*.pdf
+Dockerfile
+docker-compose.yml

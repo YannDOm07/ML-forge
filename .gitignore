@@ -1,0 +1,14 @@
+__pycache__/
+.pytest_cache/
+*.egg-info/
+.venv/
+# Configuration locale, générée par `python -m forge init`
+config/mlforge.toml
+# Configuration opencode propre à cette machine (python -m forge setup-opencode)
+opencode.json
+# Données et secrets locaux (jamais versionnés)
+secrets/
+mlforge-data/
+# Documents personnels non publiés
+prompt.docx
+*.pdf
