@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -292,7 +294,7 @@ class OpencodeDriver:
         self.timeout_s = timeout_s
 
     def run_cycle(self, workspace: Workspace, project: Project) -> CycleResult:
-        arguments = [*self.command, "run", "--format", "json", "--title", f"mlforge-{project.id}"]
+        arguments = [*self.command, "run", "--auto", "--format", "json", "--title", f"mlforge-{project.id}"]
         if self.attach:
             arguments += ["--attach", self.attach]
         arguments.append(CYCLE_PROMPT.format(project_id=project.id))
@@ -309,6 +311,52 @@ class OpencodeDriver:
         if done.returncode != 0:
             return CycleResult("error", output[-500:])
         return CycleResult("ok", output[-500:])
+
+
+def launch_campaign(workspace: Workspace, project: Project) -> dict:
+    """Start the complete OpenCode-driven campaign without blocking the MCP request."""
+    if not (APP_DIR / "opencode.json").is_file():
+        return {
+            "started": False,
+            "message": "La configuration opencode.json de ML Forge est absente. Poursuivez la campagne dans "
+                       "la session OpenCode courante avec les outils MCP.",
+        }
+    executable = shutil.which("opencode")
+    if executable is None:
+        return {
+            "started": False,
+            "message": "La commande opencode n'est pas disponible dans cet environnement. "
+                       "Poursuivez la campagne dans la session OpenCode courante avec les outils MCP.",
+        }
+
+    workspace.logs_dir.mkdir(parents=True, exist_ok=True)
+    log_path = workspace.logs_dir / f"campaign-{project.id}.log"
+    command = [
+        sys.executable, "-m", "forge", "campaign", "start", project.id, "--driver", "opencode",
+    ]
+    environment = os.environ.copy()
+    environment["MLFORGE_CONFIG"] = str(workspace.config.source)
+    environment["PYTHONPATH"] = os.pathsep.join(
+        part for part in (str(APP_DIR), environment.get("PYTHONPATH", "")) if part
+    )
+    creation_options = {}
+    if os.name == "nt":
+        creation_options["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        creation_options["start_new_session"] = True
+
+    with log_path.open("ab") as log:
+        process = subprocess.Popen(
+            command,
+            cwd=APP_DIR,
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            close_fds=True,
+            **creation_options,
+        )
+    return {"started": True, "pid": process.pid, "log": str(log_path)}
 
 
 # --- the campaign loop ---------------------------------------------------------------------------

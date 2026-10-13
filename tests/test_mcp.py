@@ -40,7 +40,7 @@ def server_process(config_path):
     process.wait(timeout=30)
 
 
-def test_mcp_protocol_over_stdio(server_process):
+def test_mcp_protocol_over_stdio(server_process, workspace):
     init = rpc(server_process, {"jsonrpc": "2.0", "id": 1, "method": "initialize",
                                 "params": {"protocolVersion": "2025-06-18", "capabilities": {},
                                            "clientInfo": {"name": "test", "version": "1"}}})
@@ -52,10 +52,8 @@ def test_mcp_protocol_over_stdio(server_process):
     assert {"campaign_next", "experiment_submit", "experiment_run", "fact_record", "external_request"} <= tools
     assert not any("approve" in name for name in tools)  # the LLM can never approve
 
-    created = rpc(server_process, {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
-                                   "params": {"name": "project_create",
-                                              "arguments": {"name": "Flows", "url": "https://example.org/c"}}})
-    project_id = json.loads(created["result"]["content"][0]["text"])["id"]
+    project = create_project(workspace, "Flows", "https://example.org/c")
+    project_id = project.id
     following = rpc(server_process, {"jsonrpc": "2.0", "id": 4, "method": "tools/call",
                                      "params": {"name": "campaign_next", "arguments": {"project_id": project_id}}})
     assert json.loads(following["result"]["content"][0]["text"])["étape"] == "intake"
@@ -69,6 +67,58 @@ def test_mcp_protocol_over_stdio(server_process):
                                  "params": {"name": "campaign_next", "arguments": {"project_id": "inexistant"}}})
     assert error["result"]["isError"] and "Projet inconnu" in error["result"]["content"][0]["text"]
     assert rpc(server_process, {"jsonrpc": "2.0", "id": 8, "method": "nope"})["error"]["code"] == -32601
+
+
+def test_project_create_starts_background_campaign(workspace, monkeypatch):
+    launch = {"started": True, "pid": 1234, "log": str(workspace.logs_dir / "campaign.log")}
+    monkeypatch.setattr("forge.campaign.launch_campaign", lambda _workspace, _project: launch)
+
+    result = Server(workspace).project_create("Flows", "https://example.org/c")
+
+    assert result["campagne"] == launch
+    assert result["id"] in result["dossier"]
+    assert "en arrière-plan" in result["message"]
+
+
+def test_launch_campaign_requires_opencode_command(workspace, monkeypatch, tmp_path):
+    from forge.campaign import launch_campaign
+
+    project = create_project(workspace, "Flows", "https://example.org/c")
+    monkeypatch.setattr("forge.campaign.APP_DIR", tmp_path)
+    (tmp_path / "opencode.json").touch()
+    monkeypatch.setattr("forge.campaign.shutil.which", lambda _: None)
+
+    result = launch_campaign(workspace, project)
+
+    assert result["started"] is False
+    assert "session OpenCode courante" in result["message"]
+
+
+def test_launch_campaign_starts_detached_worker(workspace, monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from forge.campaign import launch_campaign
+
+    project = create_project(workspace, "Flows", "https://example.org/c")
+    (tmp_path / "opencode.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr("forge.campaign.APP_DIR", tmp_path)
+    monkeypatch.setattr("forge.campaign.shutil.which", lambda _: "opencode")
+    launched = {}
+
+    def fake_popen(command, **kwargs):
+        launched["command"] = command
+        launched["options"] = kwargs
+        return SimpleNamespace(pid=1234)
+
+    monkeypatch.setattr("forge.campaign.subprocess.Popen", fake_popen)
+
+    result = launch_campaign(workspace, project)
+
+    assert result["started"] is True and result["pid"] == 1234
+    assert launched["command"][-5:] == ["campaign", "start", project.id, "--driver", "opencode"]
+    assert launched["options"]["cwd"] == tmp_path
+    assert launched["options"]["env"]["MLFORGE_CONFIG"] == str(workspace.config.source)
+    assert launched["options"]["stdout"].name == result["log"]
 
 
 @pytest.fixture
