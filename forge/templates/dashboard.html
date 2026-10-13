@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML Forge Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://unpkg.com/htmx.org@1.9.10" integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/htmx.org/dist/ext/json-enc.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <h1>🔨 ML Forge Dashboard</h1>
+            <span class="version">v{{ version }}</span>
+        </div>
+        <nav class="tabs" id="main-tabs">
+            <button class="tab active" data-tab="projects">Projets</button>
+            <button class="tab" data-tab="create">Nouveau projet</button>
+        </nav>
+    </header>
+
+    <main class="main">
+        <!-- Projects List -->
+        <section id="projects-panel" class="panel active">
+            <div class="panel-header">
+                <h2>Projets</h2>
+                <button class="btn btn-primary" hx-get="/api/projects" hx-target="#projects-list" hx-swap="innerHTML">Actualiser</button>
+            </div>
+            <div id="projects-list" class="projects-grid">
+                {% for project in projects %}
+                <article class="project-card" hx-get="/api/projects/{{ project.id }}" hx-trigger="click" hx-target="#project-detail" hx-swap="innerHTML">
+                    <div class="project-header">
+                        <h3>{{ project.name }}</h3>
+                        <span class="badge badge-{{ project.status }}">{{ project.status }}</span>
+                    </div>
+                    <p class="project-id">{{ project.id }}</p>
+                    {% if project.competition_url %}
+                    <a href="{{ project.competition_url }}" target="_blank" class="project-link">🔗 Compétition</a>
+                    {% endif %}
+                    <p class="project-date">Créé le {{ project.created_at[:10] }}</p>
+                </article>
+                {% else %}
+                <div class="empty-state">
+                    <p>Aucun projet. Cliquez sur "Nouveau projet" pour commencer.</p>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- Create Project Form -->
+        <section id="create-panel" class="panel">
+            <h2>Nouveau projet</h2>
+            <form class="form" hx-post="/api/projects" hx-target="#create-result" hx-swap="innerHTML">
+                <div class="form-group">
+                    <label for="name">Nom du projet</label>
+                    <input type="text" id="name" name="name" required placeholder="ex: titanic-survival">
+                </div>
+                <div class="form-group">
+                    <label for="url">URL de la compétition (optionnel)</label>
+                    <input type="url" id="url" name="url" placeholder="https://www.kaggle.com/competitions/...">
+                </div>
+                <button type="submit" class="btn btn-primary">Créer</button>
+            </form>
+            <div id="create-result"></div>
+        </section>
+
+        <!-- Project Detail (loaded dynamically) -->
+        <section id="project-detail" class="panel">
+            <div class="detail-placeholder">Sélectionnez un projet pour voir les détails</div>
+        </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
