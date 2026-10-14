@@ -301,6 +301,8 @@ def _cmd_intake(workspace: Workspace, args: argparse.Namespace) -> int:
     print(f"{len(report.pages)} page(s) lue(s) : " + ", ".join(report.pages))
     for url, sentence in report.flags:
         print(f"Instruction ignorée ({url}) : {sentence}")
+    for repository in report.repositories:
+        print(f"Dépôt décrit : {repository}")
     for note in report.notes:
         print(f"Note : {note}")
     _print_card(report.card)

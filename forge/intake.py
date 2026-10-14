@@ -18,15 +18,18 @@ import pandas as pd
 
 from forge.actions import open_action, resolve_actions
 from forge.db import now_iso, session, transaction
+from forge.evalai import ApiPage, challenge_id, read_challenge, submission_phase
 from forge.errors import ForgeError
 from forge.experiments import log_event
 from forge.kaggle import KaggleClient, files_url, load_credentials, metadata_url
 from forge.projects import Project
 from forge.task import PROBLEM_TYPES, TaskSpec
-from forge.web import NetworkError, Web, WebPage
+from forge.repositories import SUBMISSION_EXAMPLE, describe, parse_repository, repositories_in, size_label
+from forge.web import NetworkError, Web, WebPage, injection_flags, redact_secrets
 from forge.workspace import Workspace
 
 MAX_PAGES = 15
+MAX_REPOSITORIES = 10
 RULE_CHOICES = ("allowed", "forbidden", "conditional", "unknown")
 STATUS_RANK = {"inferred": 0, "found": 1, "user": 2}
 FOLLOW_KEYWORDS = (
@@ -34,7 +37,7 @@ FOLLOW_KEYWORDS = (
     "guideline", "regle", "règle", "donnee", "donnée", "evaluation", "évaluation",
 )
 DATA_EXTENSIONS = (".csv", ".zip", ".parquet", ".json", ".tsv", ".txt", ".gz", ".npy", ".npz", ".feather")
-FOLLOW_HOSTS = ("github.com", "raw.githubusercontent.com")
+FOLLOW_HOSTS = ("github.com", "raw.githubusercontent.com", "huggingface.co")
 
 
 class IntakeError(ForgeError):
@@ -81,7 +84,7 @@ FIELDS: dict[str, Field] = {
 
 @dataclass(frozen=True)
 class Platform:
-    name: str  # kaggle | zindi | itu | generic
+    name: str  # kaggle | zindi | evalai | itu | generic
     slug: str | None
 
 
@@ -94,6 +97,8 @@ def identify_platform(url: str) -> Platform:
     if host.endswith("zindi.africa") and "competitions" in parts:
         index = parts.index("competitions")
         return Platform("zindi", parts[index + 1] if index + 1 < len(parts) else None)
+    if challenge_id(url):
+        return Platform("evalai", challenge_id(url))
     if host.endswith("itu.int"):
         return Platform("itu", parts[-1] if parts else None)
     return Platform("generic", parts[-1] if parts else None)
@@ -102,7 +107,9 @@ def identify_platform(url: str) -> Platform:
 # --- pages and facts ------------------------------------------------------------------
 
 def store_page(project: Project, url: str, origin: str, text: str, title: str = "", status: int = 200,
-               links: list | tuple = (), flags: list | tuple = ()) -> None:
+               links: list | tuple = (), flags: list | tuple = ()) -> int:
+    """Store a page with its access secrets masked; returns how many secrets were masked."""
+    text, secrets = redact_secrets(text)
     with session(project.db_path) as conn, transaction(conn):
         conn.execute(
             "INSERT INTO web_pages (url, origin, status, title, text, links_json, flags_json, content_hash, fetched_at)"
@@ -110,6 +117,7 @@ def store_page(project: Project, url: str, origin: str, text: str, title: str = 
             (url, origin, status, title, text, json.dumps(list(links), ensure_ascii=False),
              json.dumps(list(flags), ensure_ascii=False), hashlib.sha256(text.encode()).hexdigest(), now_iso()),
         )
+    return secrets
 
 
 def latest_page(project: Project, url: str) -> dict | None:
@@ -252,6 +260,8 @@ class IntakeReport:
     flags: list[tuple[str, str]] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     card: dict = field(default_factory=dict)
+    repositories: list[str] = field(default_factory=list)
+    secrets: int = 0
 
 
 def read_competition(workspace: Workspace, project: Project, url: str | None = None, transport=None) -> IntakeReport:
@@ -262,20 +272,125 @@ def read_competition(workspace: Workspace, project: Project, url: str | None = N
     web = Web(workspace, transport, project.id)
     report = IntakeReport(platform)
     for page in _crawl(web, url, workspace.config.get("acquisition", "link_depth"), report.notes):
-        store_page(project, page.url, "web", page.text, page.title, page.status, page.links, page.flags)
-        report.pages.append(page.url)
-        for sentence in page.flags:
-            report.flags.append((page.url, sentence))
-            log_event(project.db_path, None, "injection", f"Instruction ignorée dans {page.url} : {sentence}")
-    if report.pages and len(latest_page(project, report.pages[0])["text"]) < 300:
-        report.notes.append("Page principale presque vide (JavaScript ou connexion requise) : collez le texte des règles.")
+        _keep(project, report, page.url, "web", page.text, page.title, page.status, page.links, page.flags)
+    platform_pages = 0
     if platform.name == "kaggle":
         _read_kaggle(project, web, platform.slug, report.notes)
+    elif platform.name == "evalai":
+        platform_pages = _read_evalai(project, web, url, report)
+    if report.pages and not platform_pages and len(latest_page(project, report.pages[0])["text"]) < 300:
+        report.notes.append("Page principale presque vide (JavaScript ou connexion requise) : collez le texte des règles.")
+    _read_repositories(project, web, report)
+    if report.secrets:
+        report.notes.append(
+            f"{report.secrets} secret(s) d'accès (mot de passe, clé) trouvé(s) sur les pages : masqué(s), jamais conservé(s)"
+            " ni utilisé(s). Ils sont réservés aux participants inscrits : l'utilisateur les obtient lui-même."
+        )
     log_event(project.db_path, None, "intake", f"{len(report.pages)} page(s) lue(s) depuis {url}")
     extract_facts(project)
     report.card = competition_card(project)
     _ask_user(project, report.card)
     return report
+
+
+def read_url(workspace: Workspace, project: Project, url: str, transport=None) -> IntakeReport:
+    """Read one page chosen by the agent, through the same readers, logs and masks as the intake.
+
+    A repository is described through its API, an EvalAI challenge through its API, any other
+    page as text. Stored pages can then be cited by facts.
+    """
+    web = Web(workspace, transport, project.id)
+    report = IntakeReport(identify_platform(url))
+    repository = parse_repository(url)
+    if repository is not None:
+        page = describe(web, repository, report.notes)
+        if page is not None:
+            _keep_api(project, report, page)
+    elif challenge_id(url):
+        _read_evalai(project, web, url, report)
+    else:
+        try:
+            page = web.read(url, "Lecture demandée par l'agent")
+        except NetworkError as exc:
+            report.notes.append(str(exc))
+            return report
+        if page.ok:
+            _keep(project, report, page.url, "web", page.text, page.title, page.status, page.links, page.flags)
+        else:
+            report.notes.append(f"{url} : statut HTTP {page.status}.")
+    log_event(project.db_path, None, "web_read", f"{url} -> {len(report.pages)} page(s)")
+    return report
+
+
+def _keep(project: Project, report: IntakeReport, url: str, origin: str, text: str, title: str = "",
+          status: int = 200, links=(), flags=()) -> None:
+    report.secrets += store_page(project, url, origin, text, title, status, links, flags)
+    report.pages.append(url)
+    for sentence in flags:
+        report.flags.append((url, sentence))
+        log_event(project.db_path, None, "injection", f"Instruction ignorée dans {url} : {sentence}")
+
+
+def _keep_api(project: Project, report: IntakeReport, page: ApiPage) -> None:
+    _keep(project, report, page.url, "api", page.text, page.title, 200, page.links, injection_flags(page.text))
+
+
+def _read_evalai(project: Project, web: Web, url: str, report: IntakeReport) -> int:
+    """EvalAI front ends carry no text: read the challenge and its phases through the API."""
+    pages = read_challenge(web, url, report.notes)
+    for page in pages:
+        _keep_api(project, report, page)
+    challenge = next((page for page in pages if "results" not in page.data), None)
+    phases = next((page for page in pages if "results" in page.data), None)
+    if challenge is not None:
+        data = challenge.data
+
+        def quote(key):
+            return f'"{key}": {json.dumps(data[key], ensure_ascii=False)}'
+
+        if data.get("title"):
+            record_fact(project, "title", data["title"], challenge.url, quote("title"), "evalai-api")
+        if isinstance(data.get("is_docker_based"), bool):
+            kind = "code_submission" if data["is_docker_based"] else "file_submission"
+            record_fact(project, "competition_type", kind, challenge.url, quote("is_docker_based"), "evalai-api")
+        if data.get("manual_participant_approval"):
+            report.notes.append("Inscription soumise à l'approbation des organisateurs : l'utilisateur doit s'inscrire tôt.")
+        report.notes.append(f"Inscription sur la plateforme nécessaire pour soumettre (à faire par l'utilisateur) : {url}")
+    phase = submission_phase(phases.data["results"]) if phases is not None else None
+    if phase is not None:
+        def phase_quote(key):
+            return f'"{key}": {json.dumps(phase[key], ensure_ascii=False)}'
+
+        if phase.get("end_date"):
+            record_fact(project, "deadline", phase["end_date"], phases.url, phase_quote("end_date"), "evalai-api")
+        if isinstance(phase.get("max_submissions_per_day"), int):
+            record_fact(project, "rules.daily_submission_limit", phase["max_submissions_per_day"], phases.url,
+                        phase_quote("max_submissions_per_day"), "evalai-api")
+    return len(pages)
+
+
+def _read_repositories(project: Project, web: Web, report: IntakeReport) -> None:
+    """Describe the data, model and code repositories cited by the pages (and by their READMEs)."""
+    described: set = set()
+    for _ in range(MAX_REPOSITORIES):
+        pending = [repo for repo in repositories_in(stored_pages(project)) if repo not in described]
+        if not pending:
+            return
+        repository = pending[0]
+        described.add(repository)
+        page = describe(web, repository, report.notes)
+        if page is None:
+            continue
+        _keep_api(project, report, page)
+        files = page.data["files"]
+        access = f", accès sur demande ({page.data['gated']})" if page.data["gated"] else ""
+        report.repositories.append(
+            f"{repository.url} ({repository.label}, {len(files)} fichiers, {size_label(sum(s for _, s in files))}{access})"
+        )
+        for path, _ in files:
+            if SUBMISSION_EXAMPLE.search(path.rsplit("/", 1)[-1]):
+                record_fact(project, "submission_format", path, page.url, f"- {path} (", "repository",
+                            inferred=repository.kind != "datasets")
 
 
 def _crawl(web: Web, start: str, depth: int, notes: list[str]) -> list[WebPage]:
