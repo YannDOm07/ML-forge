@@ -1,0 +1,36 @@
+{# Experiments Table Template #}
+<table class="table">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Statut</th>
+            <th>Méthode</th>
+            <th>Hypothèse</th>
+            <th>Score</th>
+            <th>Δ</th>
+            <th>Décision</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for exp in experiments %}
+        <tr hx-get="/api/projects/{{ project.id }}/experiments/{{ exp.id }}" hx-target="#exp-detail-{{ exp.id }}" hx-swap="innerHTML" class="clickable-row">
+            <td><code>{{ exp.id }}</code></td>
+            <td><span class="badge badge-{{ exp.status }}">{{ exp.status }}</span></td>
+            <td>{{ exp.method }}</td>
+            <td class="hypothesis">{{ exp.hypothesis[:80] }}{% if exp.hypothesis|length > 80 %}...{% endif %}</td>
+            <td>{% if exp.metric_mean is not none %}{{ exp.metric_mean | round(5) }} ± {{ exp.metric_std | round(5) }}{% else %}—{% endif %}</td>
+            <td>{% if exp.delta is not none %}{{ exp.delta | round(5) }}{% else %}—{% endif %}</td>
+            <td>{% if exp.decision %}<span class="badge badge-{{ exp.decision }}">{{ exp.decision }}</span>{% else %}—{% endif %}</td>
+        </tr>
+        <tr id="exp-detail-{{ exp.id }}" class="exp-detail-row" style="display: none;">
+            <td colspan="7">
+                <div class="exp-detail" id="exp-detail-content-{{ exp.id }}">Chargement...</div>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="7" class="empty">Aucune expérience.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

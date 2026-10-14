@@ -55,7 +55,7 @@ class Server:
     def _tools(self) -> list[Tool]:
         return [
             Tool("project_list", "Lister les projets ML Forge.", {}, (), self.project_list),
-            Tool("project_create", "Créer un projet à partir du lien d'une compétition.",
+            Tool("project_create", "Créer un projet depuis le lien et démarrer automatiquement la campagne OpenCode jusqu'aux livrables.",
                  {"name": _s("Nom du projet"), "url": _s("Lien de la compétition")}, ("name", "url"), self.project_create),
             Tool("campaign_next", "État compact du projet et prochaine étape : à appeler au début de chaque cycle.",
                  PROJECT, ("project_id",), self.campaign_next),
@@ -121,10 +121,26 @@ class Server:
         return [{"id": p.id, "nom": p.name, "lien": p.competition_url} for p in list_projects(self.workspace)]
 
     def project_create(self, name: str, url: str):
+        from forge.campaign import launch_campaign
         from forge.projects import create_project
 
         project = create_project(self.workspace, name, url)
-        return {"id": project.id, "prochaine_étape": "campaign_prepare"}
+        campaign = launch_campaign(self.workspace, project)
+        if campaign["started"]:
+            return {
+                "id": project.id,
+                "dossier": str(project.path),
+                "campagne": campaign,
+                "message": "Campagne OpenCode démarrée en arrière-plan. Elle prépare le projet, mène les expériences "
+                           "et génère les livrables. Consultez status/campaign_next pour le suivi.",
+            }
+        return {
+            "id": project.id,
+            "dossier": str(project.path),
+            "campagne": campaign,
+            "prochaine_étape": "campaign_prepare",
+            "message": campaign["message"],
+        }
 
     def campaign_next(self, project_id: str):
         from forge.campaign import campaign_summary, render_summary

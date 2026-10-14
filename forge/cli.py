@@ -100,6 +100,13 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("memory", help="leçons mesurées et calibration pour un projet").add_argument("project_id")
     opencode = sub.add_parser("setup-opencode", help="écrire opencode.json (serveur MCP et permissions)")
     opencode.add_argument("--docker", metavar="IMAGE", help="serveur MCP lancé dans l'image Docker (ex. mlforge:1.0.0)")
+    ui = sub.add_parser("ui", help="ouvrir l'interface locale en lecture seule")
+    ui.add_argument("--project", help="projet affiché au démarrage")
+    ui.add_argument("--port", type=_port_number, default=8765, help="port local (défaut : 8765)")
+    web = sub.add_parser("web-server", help="lancer l'interface web (dashboard)")
+    web.add_argument("--host", default="127.0.0.1", help="adresse d'écoute (défaut: 127.0.0.1)")
+    web.add_argument("--port", type=int, default=8080, help="port d'écoute (défaut: 8080)")
+    web.add_argument("--reload", action="store_true", help="rechargement automatique (dev)")
     return parser
 
 
@@ -437,6 +444,30 @@ def _cmd_setup_opencode(workspace: Workspace, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_web_server(workspace: Workspace, args: argparse.Namespace) -> int:
+    import os
+    os.environ["MLFORGE_CONFIG"] = str(workspace.config.source)
+    from forge.web_server import main as web_main
+    return web_main(["--host", args.host, "--port", str(args.port)] + (["--reload"] if args.reload else []))
+
+
+def _cmd_ui(workspace: Workspace, args: argparse.Namespace) -> int:
+    from forge.ui.server import serve
+
+    serve(workspace, args.project, args.port)
+    return 0
+
+
+def _port_number(value: str) -> int:
+    try:
+        port = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("le port doit être un entier") from exc
+    if not 1 <= port <= 65535:
+        raise argparse.ArgumentTypeError("le port doit être compris entre 1 et 65535")
+    return port
+
+
 COMMANDS = {
     "config": _cmd_config,
     "create": _cmd_create,
@@ -466,4 +497,6 @@ COMMANDS = {
     "submissions": _cmd_submissions,
     "memory": _cmd_memory,
     "setup-opencode": _cmd_setup_opencode,
+    "ui": _cmd_ui,
+    "web-server": _cmd_web_server,
 }

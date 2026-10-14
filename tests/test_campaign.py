@@ -89,6 +89,22 @@ def fake_llm(tmp_path, body: str):
     return OpencodeDriver(command=[sys.executable, str(script)], timeout_s=60)
 
 
+def test_opencode_cycle_is_noninteractive(workspace, monkeypatch):
+    project = create_project(workspace, "Non interactif", URL)
+    captured = {}
+
+    def fake_run(arguments, **kwargs):
+        captured["arguments"] = arguments
+        return type("Completed", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+    monkeypatch.setattr("forge.campaign.subprocess.run", fake_run)
+
+    result = OpencodeDriver().run_cycle(workspace, project)
+
+    assert result.kind == "ok"
+    assert captured["arguments"][1:3] == ["run", "--auto"]
+
+
 def test_rate_limited_llm_pauses_then_resumes(workspace, kaggle, tmp_path):
     _, transport = kaggle
     project = create_project(workspace, "Limité", URL)

@@ -1,0 +1,83 @@
+# ML Forge - Étapes de lancement
+
+## 1. Configuration initiale (une seule fois)
+```bash
+# Créer la config si pas déjà fait
+python -m forge init --root C:/MLForge
+
+# Installer les dépendances web
+pip install -e ".[web]"
+```
+
+## 2. Lancer le frontend ML Forge
+```bash
+# Depuis PowerShell, aller dans le dossier du projet
+cd C:\DEV\Agent\ML-forge
+
+# Lancer l'interface locale en lecture seule sur le port 8765
+C:\DEV\Agent\.venv\Scripts\python.exe -m forge --config C:\MLForge\config\mlforge.toml ui
+
+# Facultatif : ouvrir directement un projet ou choisir un autre port
+C:\DEV\Agent\.venv\Scripts\python.exe -m forge --config C:\MLForge\config\mlforge.toml ui --project PROJET_ID --port 9000
+```
+
+## 3. Ouvrir dans le navigateur
+http://127.0.0.1:8765
+
+## 4. Commandes utiles
+
+### Lister les projets
+```bash
+python -m forge list
+```
+
+### Créer un projet
+```bash
+python -m forge create "mon-projet" --url "https://www.kaggle.com/competitions/..."
+```
+
+### Voir le statut d'un projet
+```bash
+python -m forge status PROJET_ID
+```
+
+### Lancer une campagne (builtin = sans LLM)
+```bash
+python -m forge campaign start PROJET_ID --driver builtin
+```
+
+### Lancer une campagne (avec opencode / LLM)
+```bash
+python -m forge campaign start PROJET_ID --driver opencode
+```
+
+### Voir l'historique des expériences
+```bash
+python -m forge history PROJET_ID
+```
+
+### Voir le meilleur candidat
+```bash
+python -m forge best PROJET_ID
+```
+
+### Finaliser (générer les livrables)
+```bash
+python -m forge finalize PROJET_ID
+```
+
+## 5. Arrêter le serveur
+`Ctrl+C` dans le terminal où tourne `forge ui`
+
+Le serveur écoute uniquement sur `127.0.0.1`. L'interface se rafraîchit automatiquement toutes les 5 secondes et ne modifie pas les données.
+
+## 6. Variables d'environnement importantes
+- `MLFORGE_CONFIG` : chemin vers mlforge.toml (défaut: config/mlforge.toml)
+- `PYTHONPATH` : doit inclure C:\DEV\Agent\ML-forge (géré par opencode.json)
+
+## 7. Fichiers clés
+- Config : C:\MLForge\config\mlforge.toml
+- Données : C:\MLForge\ (racine définie dans la config)
+- Code : C:\DEV\Agent\ML-forge\forge\
+- Templates web : C:\DEV\Agent\ML-forge\forge\templates\
+- Static web : C:\DEV\Agent\ML-forge\forge\static\

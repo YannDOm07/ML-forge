@@ -43,6 +43,10 @@ docker compose run --rm mlforge campaign start <id>
 
 ## Du lien aux livrables
 
+Après la configuration initiale d'OpenCode (`forge setup-opencode`), envoyez le lien de compétition à OpenCode. Son outil MCP `project_create` crée le dossier et lance automatiquement la campagne dans un processus local détaché : l'appel MCP rend la main immédiatement, sans garder la conversation ouverte. Le worker prépare les données, puis lance un appel OpenCode non interactif (`opencode run --auto`) par cycle d'expérience, et génère les livrables à la fin. Ces cycles ont besoin du réseau pour joindre le modèle configuré ; ils ne gardent toutefois ni l'appel MCP ni une session de conversation interactive occupés pendant toute la campagne. L'appel initial renvoie l'identifiant, le dossier et le journal. La campagne peut s'arrêter en attente d'une action explicite de votre part (par exemple jeton Kaggle, acceptation du règlement ou fichier à déposer).
+
+Si le serveur MCP ne trouve pas la commande `opencode` (notamment lorsqu'il tourne dans Docker), il ne prétend pas qu'une campagne est partie : l'agent doit poursuivre le flux avec les outils MCP de la session courante et appeler `deliverables_build` à la fin. La commande CLI ci-dessous reste disponible pour lancer ou reprendre une campagne manuellement.
+
 ```powershell
 forge create "Ma compétition" --url https://www.kaggle.com/competitions/<slug>
 forge campaign start <id>                    # plan de référence, sans LLM, budget de nuit (8 h)
@@ -80,10 +84,22 @@ forge setup-opencode                   # écrit opencode.json : serveur MCP ML F
 opencode                               # dans le dossier du code ; choisissez votre modèle
 ```
 
+Cette configuration est à faire une fois. Ensuite, depuis OpenCode, l'envoi du lien déclenche la création et la campagne automatiquement ; consultez `forge status <id>` ou `forge campaign status <id>` pour suivre son état.
+
 - ML Forge est un serveur MCP local. Les outils `mlforge_*` sont les seules actions de l'agent : shell, écriture de fichiers et lecture web directe sont refusés (`deny`).
 - Le LLM ne reçoit jamais le dataset brut. Il ne reçoit des lignes que si le règlement autorise explicitement le partage, et 20 au maximum. Les sorties d'outils sont bornées.
 - Les accords (données externes, modèle préentraîné, remplacement d'un livrable) ne passent jamais par le LLM. Vous les donnez avec `forge approvals <id>` puis `forge approve <id> <n>` (ou `refuse`).
 - En cas de limite de débit ou de LLM indisponible, la campagne se met en pause. Reprise : `forge campaign resume <id>`.
+
+## Interface locale en lecture seule
+
+```powershell
+forge ui                         # http://127.0.0.1:8765
+forge ui --project <id>          # ouvrir un projet précis
+forge ui --project <id> --port 9000
+```
+
+Le tableau de bord présente neuf vues : aperçu, campagne, expériences, hypothèses, données, validation, livrables, mémoire et journal. Il écoute uniquement sur `127.0.0.1`, interroge SQLite en lecture seule et actualise les données toutes les cinq secondes. Il n'affiche pas les lignes brutes des jeux de données et ne permet aucune action de modification.
 
 ## Commandes
 
@@ -98,7 +114,7 @@ opencode                               # dans le dossier du code ; choisissez vo
 | `approvals <id>` · `approve <id> <n>` · `refuse <id> <n>` | Vos accords |
 | `memory <id>` | Leçons mesurées des autres projets et calibration des estimations |
 | `backup [<id>]` · `restore <zip>` · `archive <id>` · `delete <id>` · `disk` | Sauvegarde, restauration, archivage, suppression (confirmée et sauvegardée), espace |
-| `demo` · `config show/check` · `setup-opencode` | Démonstration reproductible, configuration, opencode |
+| `demo` · `config show/check` · `setup-opencode` · `ui [--project <id>] [--port <n>]` | Démonstration, configuration, opencode, interface locale en lecture seule |
 
 ## Ce qui est mémorisé, et comment cela sert
 

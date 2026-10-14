@@ -1,0 +1,127 @@
+{# Project Detail Template #}
+<div class="detail-header">
+    <div>
+        <h2>{{ project.name }}</h2>
+        <span class="badge badge-{{ project.status }}">{{ project.status }}</span>
+        <span class="project-id">{{ project.id }}</span>
+    </div>
+    <div class="detail-actions">
+        {% if project.competition_url %}
+        <a href="{{ project.competition_url }}" target="_blank" class="btn btn-secondary">Voir la compétition</a>
+        {% endif %}
+        <button class="btn btn-danger" hx-delete="/api/projects/{{ project.id }}" hx-confirm="Supprimer ce projet ?" hx-target="#project-detail" hx-swap="innerHTML">Archiver</button>
+    </div>
+</div>
+
+<div class="detail-grid">
+    <!-- Overview -->
+    <section class="card">
+        <h3>📊 Vue d'ensemble</h3>
+        <div class="stats">
+            <div class="stat">
+                <span class="stat-value">{{ project.experiment_counts.get('completed', 0) }}</span>
+                <span class="stat-label">Expériences terminées</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value">{{ project.experiment_counts.get('running', 0) }}</span>
+                <span class="stat-label">En cours</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value">{{ project.experiment_counts.get('failed', 0) }}</span>
+                <span class="stat-label">Échouées</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value">{{ project.experiment_counts.get('pending', 0) }}</span>
+                <span class="stat-label">En attente</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Active Campaign -->
+    <section class="card">
+        <h3>🚀 Campagne active</h3>
+        {% if project.active_campaign %}
+        <div class="campaign-status">
+            <p><strong>ID :</strong> {{ project.active_campaign.id }}</p>
+            <p><strong>Statut :</strong> <span class="badge badge-{{ project.active_campaign.status }}">{{ project.active_campaign.status }}</span></p>
+            <p><strong>Raison :</strong> {{ project.active_campaign.reason }}</p>
+            <p><strong>Expériences :</strong> {{ project.active_campaign.experiments_done }}/{{ project.active_campaign.max_experiments }}</p>
+            <div class="campaign-actions">
+                <button class="btn btn-primary" hx-post="/api/projects/{{ project.id }}/campaign/stop" hx-target="#project-detail" hx-swap="innerHTML">Arrêter</button>
+            </div>
+        </div>
+        {% else %}
+        <p>Aucune campagne en cours.</p>
+        <div class="campaign-actions">
+            <button class="btn btn-primary" hx-post="/api/projects/{{ project.id }}/campaign/start?driver=builtin&interactive=false" hx-target="#project-detail" hx-swap="innerHTML">Démarrer (builtin)</button>
+            <button class="btn btn-secondary" hx-post="/api/projects/{{ project.id }}/campaign/start?driver=opencode&interactive=false" hx-target="#project-detail" hx-swap="innerHTML">Démarrer (opencode)</button>
+        </div>
+        {% endif %}
+    </section>
+
+    <!-- Data Sources -->
+    <section class="card">
+        <h3>📁 Sources de données</h3>
+        {% if project.data_sources %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Fichier</th>
+                    <th>État</th>
+                    <th>Taille</th>
+                    <th>Lignes</th>
+                    <th>Colonnes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for source in project.data_sources %}
+                <tr>
+                    <td>{{ source.path.split('/')[-1] }}</td>
+                    <td><span class="badge badge-{{ source.state }}">{{ source.state }}</span></td>
+                    <td>{{ (source.bytes / 1024 / 1024) | round(1) }} Mo</td>
+                    <td>{{ source.rows or '?' }}</td>
+                    <td>{{ source.cols or '?' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty">Aucune source de données.</p>
+        {% endif %}
+    </section>
+
+    <!-- Open Actions -->
+    <section class="card">
+        <h3>⚠️ Actions requises</h3>
+        {% if project.open_actions %}
+        <ul class="actions-list">
+            {% for action in project.open_actions %}
+            <li class="action-item">
+                <span class="action-kind">{{ action.kind }}</span>
+                <span class="action-message">{{ action.message }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="empty">Aucune action en attente.</p>
+        {% endif %}
+    </section>
+</div>
+
+<!-- Experiments Table -->
+<section class="card experiments-section">
+    <div class="section-header">
+        <h3>🧪 Expériences</h3>
+        <button class="btn btn-secondary" hx-get="/api/projects/{{ project.id }}/experiments" hx-target="#experiments-table" hx-swap="innerHTML">Actualiser</button>
+    </div>
+    <div id="experiments-table">
+        {% include "experiments_table.html" with context %}
+    </div>
+</section>
+
+<!-- Competition Card -->
+<section class="card">
+    <h3>📋 Fiche de compétition</h3>
+    <button class="btn btn-secondary" hx-get="/api/projects/{{ project.id }}/card" hx-target="#competition-card" hx-swap="innerHTML">Charger</button>
+    <div id="competition-card" class="card-content"></div>
+</section>
