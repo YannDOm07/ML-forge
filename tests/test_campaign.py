@@ -54,6 +54,12 @@ def test_from_link_to_verified_submission_without_llm(workspace, kaggle):
     assert verify_submission(deliverables / "submission.csv", competition["sample_submission"]) == []
     assert (deliverables / "solution" / "make_submission.py").is_file()
     assert "submission" in (deliverables / "README.md").read_text(encoding="utf-8")
+    # Every step leaves its trace in the project journal, and the notebooks show the results.
+    journal = (project.path / "JOURNAL.md").read_text(encoding="utf-8")
+    for step in ("Comprendre", "Acquérir", "Formaliser", "Valider", "Baseline", "Expérimenter", "Livrer"):
+        assert f"— {step}" in journal, step
+    assert "accepted" in journal or "rejected" in journal
+    assert "E0002" in (project.path / "notebooks" / "03_experiences.ipynb").read_text(encoding="utf-8")
     roles = [e.card.get("role") for e in list_experiments(project.db_path)]
     assert roles.count("baseline") == 1 and roles.count("stability") == 2
     assert len(list(workspace.backups_dir.glob(f"{project.id}-*.zip"))) == 1

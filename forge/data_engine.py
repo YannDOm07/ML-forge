@@ -12,7 +12,9 @@ LEAK_PURITY = 0.999
 
 
 def read_table(path: str, max_rows: int | None = None) -> pd.DataFrame:
-    return pd.read_csv(path, nrows=max_rows, low_memory=False)
+    from forge.task import read_table as read_any
+
+    return read_any(path, nrows=max_rows)
 
 
 def feature_columns(task: TaskSpec, frame: pd.DataFrame) -> list[str]:

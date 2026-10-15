@@ -25,7 +25,7 @@ from forge.intake import classify_files, competition_card, fact_value
 from forge.projects import Project
 from forge.report import decisions_by_experiment, write_report
 from forge.runner import Protocol, current_best, dataset_hash, latest_profile, latest_protocol, run_experiment, submit_experiment
-from forge.submission import SubmissionError, build_submission
+from forge.submission import SubmissionError, build_from_spec, build_submission, parse_spec
 from forge.task import METRICS
 from forge.workspace import Workspace
 
@@ -84,7 +84,8 @@ def stability_check(workspace: Workspace, project: Project, protocol: Protocol, 
 
 MAKE_SUBMISSION = '''"""Reproduit hors ligne la soumission produite par ML Forge.
 
-Usage : python make_submission.py --data DOSSIER_DES_DONNEES [--out submission.csv]
+Usage : python make_submission.py --data DOSSIER_DES_DONNEES [--out submission.csv | DOSSIER]
+(--out est un dossier quand la compétition demande un fichier par jeu.)
 Dépendances : pandas, numpy, scikit-learn.
 """
 import argparse
@@ -113,6 +114,9 @@ def main() -> None:
     for key in ("train_path", "test_path"):
         if context["task"].get(key):
             context["task"][key] = str((args.data / context["task"][key]).resolve())
+    if context["task"].get("prediction_sets"):
+        context["task"]["prediction_sets"] = {
+            name: str((args.data / path).resolve()) for name, path in context["task"]["prediction_sets"].items()}
     work = HERE / "run"
     work.mkdir(exist_ok=True)
     (work / "context.json").write_text(json.dumps(context), encoding="utf-8")
@@ -122,6 +126,9 @@ def main() -> None:
         runpy.run_path(str(HERE / "script.py"), run_name="__main__")
     finally:
         os.chdir(previous)
+    if spec.get("rules"):
+        write_rule_files(spec, work, out)
+        return
     predictions = pd.read_csv(work / "test_pred.csv")
     if spec.get("class_weights"):
         columns = class_columns(predictions)
@@ -129,6 +136,22 @@ def main() -> None:
     sample = pd.read_csv(args.data / spec["sample_file"])
     to_submission(sample, predictions, spec["kind"], spec["classes"], spec["positive_label"]).to_csv(out, index=False)
     print(f"Soumission écrite : {out}")
+
+
+def write_rule_files(spec, work, out):
+    """One file per set, as the competition rules describe it (columns, scale, bounds)."""
+    rules = spec["rules"]
+    out.mkdir(parents=True, exist_ok=True)
+    for set_name, file_name in rules["files"].items():
+        predictions = pd.read_csv(work / spec["files"][set_name])
+        values = predictions["prediction"] * float(rules.get("scale", 1))
+        if "clip" in rules:
+            values = values.clip(*rules["clip"])
+        frame = pd.DataFrame({rules["columns"]["id"]: predictions[spec["id_column"]],
+                              rules["columns"]["prediction"]: values})
+        target = out / file_name.replace("{", "").replace("}", "")
+        frame.to_csv(target, index=False)
+        print(f"Soumission écrite : {target}")
 
 
 if __name__ == "__main__":
@@ -143,7 +166,8 @@ def _replace_guard(project: Project, target: Path, approver: Approver, source: s
         shutil.rmtree(target) if target.is_dir() else target.unlink()
 
 
-def build_solution_package(project: Project, protocol: Protocol, best_id: str, sample: Path, approver: Approver) -> Path:
+def build_solution_package(project: Project, protocol: Protocol, best_id: str, sample: Path | None, approver: Approver,
+                           rules_spec: dict | None = None) -> Path:
     best = get_experiment(project.db_path, best_id)
     script_owner, weights = best, None
     if best.card.get("role") == "decision_stage":
@@ -158,28 +182,44 @@ def build_solution_package(project: Project, protocol: Protocol, best_id: str, s
             "SELECT content FROM experiment_code WHERE code_hash = ?", (script_owner.card["code_hash"],)
         ).fetchone()["content"]
     (target / "script.py").write_text(code.replace("forge.tabular", "forge_tabular"), encoding="utf-8")
-    tabular = TABULAR_SOURCE.read_text(encoding="utf-8").replace(
-        "from forge.task import PROBA_PREFIX", 'PROBA_PREFIX = "p:"'
-    )
+    tabular = TABULAR_SOURCE.read_text(encoding="utf-8").replace("from forge.task import", "from forge_task import")
     (target / "forge_tabular.py").write_text(tabular, encoding="utf-8")
+    # The task module travels with the solution, without the rest of ML Forge.
+    task_module = TABULAR_SOURCE.with_name("task.py").read_text(encoding="utf-8").replace(
+        "from forge.errors import ForgeError", "ForgeError = Exception")
+    (target / "forge_task.py").write_text(task_module, encoding="utf-8")
     task = protocol.task.to_dict()
     task["train_path"] = Path(task["train_path"]).name
     task["test_path"] = Path(task["test_path"]).name if task["test_path"] else None
+    if task["prediction_sets"]:
+        task["prediction_sets"] = {name: Path(path).name for name, path in task["prediction_sets"].items()}
+    task["media_dirs"] = []
     context = {
         "task": task, "folds": protocol.folds, "classes": protocol.classes, "fold_scheme": protocol.scheme,
         "seed": int(script_owner.card.get("seed", 2026)), "parent_dir": None,
-        "outputs": {"oof": "oof.csv", "test": "test_pred.csv", "info": "info.json"},
+        "outputs": {"oof": "oof.csv", "test": "test_pred.csv", "info": "info.json",
+                    "sets": protocol.task.prediction_files()},
     }
     (target / "context.json").write_text(json.dumps(context), encoding="utf-8")
     spec = {"kind": submission_kind(protocol), "classes": protocol.classes, "positive_label": protocol.task.positive_label,
-            "sample_file": sample.name, "class_weights": weights}
+            "sample_file": sample.name if sample else None, "class_weights": weights,
+            "rules": rules_spec, "id_column": protocol.task.id_column, "files": protocol.task.prediction_files()}
     (target / "submission_spec.json").write_text(json.dumps(spec, ensure_ascii=False, indent=1), encoding="utf-8")
     (target / "make_submission.py").write_text(MAKE_SUBMISSION, encoding="utf-8")
-    files = ", ".join(p for p in (task["train_path"], task["test_path"], sample.name) if p)
+    tables = [task["train_path"], task["test_path"], *(task["prediction_sets"] or {}).values()]
+    files = ", ".join(dict.fromkeys(p for p in [*tables, sample.name if sample else None] if p))
+    out = "<dossier de sortie>" if rules_spec else "submission.csv"
+    derived = (
+        "\nLes tables `*__media.csv` sont dérivées des données officielles : descripteurs des médias calculés par "
+        "`forge.media` (ML Forge, étape « Calculer »), dans `data/derived/` du projet.\n"
+        if protocol.task.media_dirs else "")
+    produced = (f"\nFichiers produits : {', '.join(rules_spec['files'].values())} (remplacez les espaces réservés "
+                "comme `{TEAM_ID}` avant de soumettre).\n" if rules_spec else "")
     (target / "README.md").write_text(
         f"# Solution reproductible — {project.name}\n\n"
         f"Expérience retenue : {best_id} ({best.method}). Seed : {context['seed']}.\n\n"
-        f"```\npython make_submission.py --data <dossier contenant {files}> --out submission.csv\n```\n\n"
+        f"```\npython make_submission.py --data <dossier contenant {files}> --out {out}\n```\n"
+        f"{produced}{derived}\n"
         "Dépendances : pandas, numpy, scikit-learn (versions de requirements.txt). Fonctionne hors ligne.\n",
         encoding="utf-8",
     )
@@ -225,6 +265,19 @@ def _cell(kind: str, source: str) -> dict:
 
 # --- technical report ---------------------------------------------------------------------
 
+def _describe_target(stats) -> str:
+    """Readable summary of the target profile (regression statistics or class shares)."""
+    if not isinstance(stats, dict):
+        return str(stats) if stats is not None else "—"
+    parts = [f"{name} {value:.4g}" if isinstance(value, float) else f"{name} {value}"
+             for name, value in stats.items() if not isinstance(value, (dict, list))]
+    shares = next((value for value in stats.values() if isinstance(value, dict)), None)
+    if shares:
+        parts.append("répartition " + ", ".join(f"{k} : {v:.1%}" if isinstance(v, float) else f"{k} : {v}"
+                                                for k, v in list(shares.items())[:10]))
+    return " ; ".join(parts) or "—"
+
+
 def build_technical_report(project: Project, protocol: Protocol, best_id: str, stability: dict) -> Path:
     decisions = decisions_by_experiment(project)
     experiments = [e for e in list_experiments(project.db_path) if e.protocol_id == protocol.id]
@@ -241,7 +294,8 @@ def build_technical_report(project: Project, protocol: Protocol, best_id: str, s
         f"Meilleur candidat {best_id} ({best.method}) : {protocol.task.metric} = {best_decision['metric_mean']:.5f} "
         f"± {best_decision['metric_std']:.5f} en validation ; écart-type entre seeds : {stability['std']}.", "",
         "## Données et régime",
-        f"{profile.get('rows', '?')} lignes, {profile.get('features', '?')} variables. Cible : {profile.get('target')}.",
+        f"{profile.get('rows', '?')} lignes, {profile.get('features', '?')} variables. "
+        f"Cible {protocol.task.target} : {_describe_target(profile.get('target'))}.",
         f"Plancher d'erreur (jumeaux contradictoires) : {profile.get('twins', {}).get('error_floor')}.", "",
         "## Validation",
         " ".join(protocol.notes) + (" Validation fiable." if protocol.reliability["reliable"] else
@@ -276,11 +330,17 @@ def finalize(workspace: Workspace, project: Project, approver: Approver | None =
     result = FinalizeResult()
     sample = sample_file(project)
     stability = stability_check(workspace, project, protocol, best)
-    if sample is None:
-        result.problems.append("Fichier exemple de soumission introuvable : soumission non générée.")
-    else:
+    rules_spec = fact_value(competition_card(project), "submission_spec")
+    if sample is not None:
         _attempt(result, lambda: build_submission(project, best, sample, submission_kind(protocol), approver, "ml-forge"))
         _attempt(result, lambda: build_solution_package(project, protocol, best, sample, approver))
+    elif rules_spec:
+        spec = parse_spec(rules_spec)
+        _attempt_many(result, lambda: build_from_spec(project, best, spec, approver, "ml-forge"))
+        _attempt(result, lambda: build_solution_package(project, protocol, best, None, approver, spec))
+    else:
+        result.problems.append("Ni fichier exemple ni spécification de soumission (champ submission_spec) : "
+                               "soumission non générée.")
     card = competition_card(project)
     wanted = {fact["value"] for fact in card["fields"]["deliverables"]}
     solution = project.path / DELIVERABLES / SOLUTION
@@ -299,6 +359,13 @@ def finalize(workspace: Workspace, project: Project, approver: Approver | None =
     return result
 
 
+def _attempt_many(result: FinalizeResult, action) -> None:
+    try:
+        result.files.extend(action())
+    except (ApprovalRequired, SubmissionError, ForgeError) as exc:
+        result.problems.append(str(exc))
+
+
 def _attempt(result: FinalizeResult, action) -> None:
     try:
         result.files.append(action())
@@ -308,7 +375,8 @@ def _attempt(result: FinalizeResult, action) -> None:
 
 def deliverables_checklist(project: Project, wanted: set[str]) -> list[dict]:
     root = project.path / DELIVERABLES
-    items = [("submission", root / "submission.csv", "toujours"), ("solution", root / SOLUTION / "make_submission.py", "toujours")]
+    submission = root / "submission" if (root / "submission").is_dir() else root / "submission.csv"
+    items = [("submission", submission, "toujours"), ("solution", root / SOLUTION / "make_submission.py", "toujours")]
     extra = {"notebook": root / "solution.ipynb", "report": root / "technical_report.md",
              "inference_script": root / SOLUTION / "make_submission.py", "training_code": root / SOLUTION / "script.py"}
     items += [(name, extra[name], "exigé par la compétition") for name in sorted(wanted) if name in extra]

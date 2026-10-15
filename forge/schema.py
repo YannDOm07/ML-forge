@@ -69,6 +69,29 @@ GLOBAL_MIGRATIONS: list[str] = [
         UNIQUE (project_id, experiment_id)
     );
     """,
+    # v4 — lessons register: techniques that work or fail, mistakes and traps, by step and context
+    """
+    CREATE TABLE lessons (
+        id INTEGER PRIMARY KEY,
+        step TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('technique', 'erreur', 'reussite', 'piege')),
+        outcome TEXT NOT NULL CHECK (outcome IN ('marche', 'echoue', 'neutre')),
+        title TEXT NOT NULL,
+        title_key TEXT NOT NULL,
+        why TEXT NOT NULL,
+        context_key TEXT NOT NULL,
+        context_json TEXT NOT NULL,
+        source TEXT NOT NULL,
+        n_seen INTEGER NOT NULL,
+        projects_json TEXT NOT NULL,
+        evidence_json TEXT NOT NULL,
+        mean_delta REAL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (step, title_key, context_key)
+    );
+    CREATE INDEX lessons_by_step ON lessons (step);
+    """,
 ]
 
 PROJECT_MIGRATIONS: list[str] = [
@@ -274,5 +297,22 @@ PROJECT_MIGRATIONS: list[str] = [
         public_score REAL,
         note TEXT
     );
+    """,
+    # v5 — derived data: tables ML Forge computes from the official files (media descriptors…)
+    """
+    CREATE TABLE data_sources_v5 (
+        id INTEGER PRIMARY KEY,
+        role TEXT NOT NULL CHECK (role IN ('official', 'external', 'inbox', 'derived')),
+        path TEXT NOT NULL UNIQUE,
+        sha256 TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        mtime_ns INTEGER NOT NULL,
+        origin_url TEXT,
+        license TEXT,
+        registered_at TEXT NOT NULL
+    );
+    INSERT INTO data_sources_v5 SELECT * FROM data_sources;
+    DROP TABLE data_sources;
+    ALTER TABLE data_sources_v5 RENAME TO data_sources;
     """,
 ]

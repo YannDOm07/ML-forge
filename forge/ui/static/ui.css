@@ -215,3 +215,8 @@ body{margin:0}
   .metric-card,.panel{padding:14px}
   .status-bar{flex-wrap:wrap}
 }
+/* v3 : portefeuille de projets */
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:18px}
+.project-card{text-align:left;font:inherit;color:inherit;cursor:pointer;display:flex;flex-direction:column;gap:12px}
+.project-card:hover,.project-card:focus-visible{border-color:var(--green-dark);outline:none;background:#fbfcf9}
+.project-card h2{font-size:15px;font-weight:600;margin:0}

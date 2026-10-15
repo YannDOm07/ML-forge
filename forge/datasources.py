@@ -9,7 +9,7 @@ from pathlib import Path
 from forge.db import now_iso, session, transaction
 from forge.errors import DataSourceError
 
-ROLES = {"official", "external", "inbox"}
+ROLES = {"official", "external", "inbox", "derived"}
 _CHUNK = 1024 * 1024
 
 
@@ -38,6 +38,10 @@ def register_data_source(
     if not path.is_file():
         raise DataSourceError(f"Fichier introuvable : {path}")
     stat = path.stat()
+    with session(project_db) as conn:
+        known = conn.execute("SELECT size_bytes, mtime_ns FROM data_sources WHERE path = ?", (str(path),)).fetchone()
+    if known is not None and (known["size_bytes"], known["mtime_ns"]) == (stat.st_size, stat.st_mtime_ns):
+        return  # already registered and untouched (same rule as check_data_sources): no re-hashing
     sha256 = file_sha256(path)
     with session(project_db) as conn, transaction(conn):
         known = conn.execute("SELECT sha256 FROM data_sources WHERE path = ?", (str(path),)).fetchone()
@@ -50,6 +54,37 @@ def register_data_source(
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (role, str(path), sha256, stat.st_size, stat.st_mtime_ns, origin_url, license, now_iso()),
         )
+
+
+def register_data_sources(
+    project_db: Path, paths: list[Path], role: str, origin_url: str | None = None, license: str | None = None
+) -> int:
+    """`register_data_source` for many files in one transaction (datasets of tens of thousands of
+    media files). Same guarantees: known and untouched files are skipped, a changed one is refused.
+    Returns how many files were newly registered."""
+    if role not in ROLES:
+        raise DataSourceError(f"Rôle de donnée invalide : {role}")
+    with session(project_db) as conn:
+        known = {row["path"]: row for row in conn.execute("SELECT path, sha256, size_bytes, mtime_ns FROM data_sources")}
+    rows = []
+    for path in (Path(p).resolve() for p in paths):
+        if not path.is_file():
+            raise DataSourceError(f"Fichier introuvable : {path}")
+        stat = path.stat()
+        row = known.get(str(path))
+        if row is not None and (row["size_bytes"], row["mtime_ns"]) == (stat.st_size, stat.st_mtime_ns):
+            continue
+        sha256 = file_sha256(path)
+        if row is not None:
+            if row["sha256"] != sha256:
+                raise DataSourceError(f"{path} a changé depuis son enregistrement : nouvelle version à valider.")
+            continue
+        rows.append((role, str(path), sha256, stat.st_size, stat.st_mtime_ns, origin_url, license, now_iso()))
+    with session(project_db) as conn, transaction(conn):
+        conn.executemany(
+            "INSERT OR IGNORE INTO data_sources (role, path, sha256, size_bytes, mtime_ns, origin_url, license, registered_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)", rows)
+    return len(rows)
 
 
 def check_data_sources(project_db: Path, full: bool = False) -> list[SourceStatus]:

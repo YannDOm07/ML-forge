@@ -5,14 +5,16 @@ Laboratoire local et traçable pour compétitions de machine learning. **Vous do
 - Spécification : [`prompt_v2.md`](prompt_v2.md)
 - Architecture : [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Instructions de l'agent : [`AGENTS.md`](AGENTS.md)
+- Plan suivi pour tout projet : [`docs/PLAN.md`](docs/PLAN.md)
+- Journal de la v3, étapes et problèmes rencontrés : [`docs/JOURNAL_V3.md`](docs/JOURNAL_V3.md)
 
-Version 1.0 : les phases 1 à 8 sont terminées. 147 tests passent sous Windows et sous Linux (Docker) ; un seul test est propre à chaque système. La CI GitHub les rejoue à chaque envoi.
+Version 1.0 : les phases 1 à 8 sont terminées. Travail v3 en cours (du lien seul jusqu'aux livrables, éprouvé de bout en bout sur CLIP2) : 189 tests, dont un seul propre à chaque système, passent sous Windows. La CI GitHub les rejoue à chaque envoi.
 
 ## Installation (Windows)
 
 ```powershell
 python -m venv C:\MLForge\venv
-C:\MLForge\venv\Scripts\python -m pip install numpy==2.5.2 scipy==1.16.3 pandas==2.3.3 scikit-learn==1.7.2 pytest
+C:\MLForge\venv\Scripts\python -m pip install -r requirements-dev.txt   # numpy, scipy, pandas, scikit-learn, soundfile, pytest
 cd "C:\Users\<vous>\OneDrive\Desktop\ML FORGE"
 C:\MLForge\venv\Scripts\python -m forge init          # config\mlforge.toml + racine C:\MLForge
 C:\MLForge\venv\Scripts\python -m forge config check  # matériel et chargement des bibliothèques ML
@@ -48,21 +50,22 @@ Après la configuration initiale d'OpenCode (`forge setup-opencode`), envoyez le
 Si le serveur MCP ne trouve pas la commande `opencode` (notamment lorsqu'il tourne dans Docker), il ne prétend pas qu'une campagne est partie : l'agent doit poursuivre le flux avec les outils MCP de la session courante et appeler `deliverables_build` à la fin. La commande CLI ci-dessous reste disponible pour lancer ou reprendre une campagne manuellement.
 
 ```powershell
-forge create "Ma compétition" --url https://www.kaggle.com/competitions/<slug>
+forge new <lien>                             # projet nommé d'après la compétition, préparé jusqu'au premier blocage
 forge campaign start <id>                    # plan de référence, sans LLM, budget de nuit (8 h)
 forge campaign start <id> --driver opencode  # l'agent LLM via opencode
 forge status <id>                            # où en est-on, que dois-je faire ?
 ```
 
-Une campagne enchaîne automatiquement ces étapes :
-1. lecture de la compétition ;
-2. téléchargement des données ;
-3. fiche de compétition ;
-4. protocole de validation ;
-5. profil des données ;
-6. baseline ;
-7. expériences ;
-8. finalisation.
+Une campagne suit les neuf étapes de [`docs/PLAN.md`](docs/PLAN.md) :
+1. **comprendre** : plateforme, API (EvalAI…), sites des organisateurs, dépôts cités (Hugging Face, GitHub, Zenodo) ;
+2. **acquérir** : téléchargement avec reprise, archives extraites, fichiers trop gros signalés ;
+3. **organiser** : dossier, `JOURNAL.md`, notebooks régénérés ;
+4. **formaliser** : tables de tout format, jeux à prédire, cible, identifiant, groupes, colonnes de fuite ;
+5. **calculer** : descripteurs des médias (audio, images) joints aux tables ;
+6. **valider** : plis stratifiés, groupés ou temporels, fiabilité mesurée ;
+7. **expérimenter** : baseline puis hypothèses, décisions calculées ;
+8. **livrer** : soumission vérifiée (fichier exemple ou spécification du règlement), solution reproductible, rapport ;
+9. **capitaliser** : journal du projet, `PROGRESSION.md` commun à tous les projets, mémoire mesurée.
 
 Quand elle a besoin de vous (jeton, règlement à accepter, fichiers à déposer, texte à coller, accord), elle s'arrête sur un message précis. Vous agissez, puis vous la relancez. Le PC ne se met pas en veille pendant une campagne sans surveillance.
 
@@ -71,6 +74,7 @@ Quand elle a besoin de vous (jeton, règlement à accepter, fichiers à déposer
 | Fichier | Contenu |
 |---|---|
 | `submission.csv` | Soumission au format vérifié contre l'exemple de la compétition |
+| `submission\` | Sans fichier exemple : un fichier par jeu, selon la spécification citée du règlement |
 | `solution\` | Solution autonome et reproductible hors ligne : `python make_submission.py --data <dossier>` |
 | `technical_report.md` | Rapport technique, si la compétition l'exige |
 | `solution.ipynb` | Notebook, si exigé ou pour une compétition « code » (expérimental) |
@@ -99,20 +103,28 @@ forge ui --project <id>          # ouvrir un projet précis
 forge ui --project <id> --port 9000
 ```
 
-Le tableau de bord présente neuf vues : aperçu, campagne, expériences, hypothèses, données, validation, livrables, mémoire et journal. Il écoute uniquement sur `127.0.0.1`, interroge SQLite en lecture seule et actualise les données toutes les cinq secondes. Il n'affiche pas les lignes brutes des jeux de données et ne permet aucune action de modification.
+Le tableau de bord présente douze vues :
+- **tous les projets** (vue d'accueil) : où en est chacun, meilleur score, ce qui vous attend, chronologie commune ;
+- par projet : aperçu, **compétition** (fiche citée, dépôts décrits, pages lues), campagne, expériences, hypothèses, données (tâche formalisée, fichiers résumés par type et dossier), validation, livrables (fichiers, notebooks, tables dérivées), **leçons** du contexte du projet, mémoire et journal (`JOURNAL.md` et événements).
+
+Une vue précise s'ouvre par l'adresse : `http://127.0.0.1:8765/?project=<id>&screen=lessons`. Il écoute uniquement sur `127.0.0.1`, interroge SQLite en lecture seule et actualise les données toutes les cinq secondes. Il n'affiche pas les lignes brutes des jeux de données (les faits mesurés sur les fichiers sont masqués), résume les dizaines de milliers de fichiers d'un projet au lieu de les lister, et ne permet aucune action de modification.
+
+Le tableau de pilotage FastAPI (`forge web-server`, extra `web`) sert **le même tableau de bord** sous `/ui/`, avec la même source (`/api/state`) : les deux interfaces montrent exactement le même état.
 
 ## Commandes
 
 | Commande | Effet |
 |---|---|
+| `new <lien> [--name N]` · `notebooks <id>` | Projet depuis le seul lien (nom, dossiers, préparation) ; notebooks régénérés |
 | `create "Nom" --url <lien>` · `list [--all]` · `status <id>` | Projets ; `status` affiche aussi les actions qui vous attendent |
 | `campaign start/stop/resume/status <id> [--driver builtin\|opencode] [--interactive]` | Campagne d'expériences (budget 8 h ; 2 h avec `--interactive`) |
 | `intake <id>` · `card <id>` · `paste <id> regles.txt` · `fact <id> <champ> <valeur> --source URL --quote "…"` | Fiche de compétition : chaque fait est cité et vérifié |
-| `acquire <id>` · `inbox <id>` | Données officielles : API Kaggle, liens publics, ou fichiers déposés dans `projects\<id>\inbox\` |
+| `acquire <id> [--source <dépôt>] [--max-gb N]` · `inbox <id>` | Données officielles : API Kaggle, dépôt cité, liens publics, ou fichiers déposés dans `projects\<id>\inbox\` ; `--max-gb` autorise un gros téléchargement pour cette fois |
 | `history <id>` · `best <id>` · `compare <id> E0002 E0003` | Résultats et comparaisons (même protocole obligatoire) |
 | `finalize <id>` · `submissions <id> [--declare E0004 --score 0.81]` | Livrables ; plan de soumission respectant la limite quotidienne |
 | `approvals <id>` · `approve <id> <n>` · `refuse <id> <n>` | Vos accords |
 | `memory <id>` | Leçons mesurées des autres projets et calibration des estimations |
+| `lessons search <id> [--step] [--query]` · `lessons add <id> --step --kind --title --why [--outcome] [--scope]` · `lessons render` | Registre des leçons : chercher par contexte, consigner, régénérer `progress/` |
 | `backup [<id>]` · `restore <zip>` · `archive <id>` · `delete <id>` · `disk` | Sauvegarde, restauration, archivage, suppression (confirmée et sauvegardée), espace |
 | `demo` · `config show/check` · `setup-opencode` · `ui [--project <id>] [--port <n>]` | Démonstration, configuration, opencode, interface locale en lecture seule |
 
@@ -134,6 +146,7 @@ Le tableau de bord présente neuf vues : aperçu, campagne, expériences, hypoth
   - les projets et expériences qui le prouvent.
 
   Elle est alimentée **uniquement par des décisions calculées**, jamais par du texte généré. Elle est présentée à l'agent comme des **pistes à vérifier**, jamais appliquée automatiquement.
+- **Registre des leçons** (`forge.db`, rendu dans `C:\MLForge\progress\`) : chaque technique tentée, chaque erreur commise, chaque piège découvert, avec **son contexte** (modalité, problème, métrique, plateforme, taille), **son pourquoi** et ses preuves. ML Forge y verse lui-même le résultat de chaque expérience comparée ; l'agent y ajoute le pourquoi (`lesson_record`, ou `forge lessons add`). La recherche (`lessons_search`, `forge lessons search <id> --step <étape>`) ne renvoie que les leçons proches du contexte : **personne ne lit tout le registre**. `progress/INDEX.md` puis un fichier par modalité, découpé par étape, en donnent une lecture humaine ; `progress/chronologie.md` liste chaque étape de chaque projet.
 - **Calibration** : ML Forge compare le gain que l'agent annonçait au gain mesuré, par famille d'hypothèses. Ce ratio corrige le classement des hypothèses suivantes (`hypotheses_rank`).
 - **Ce que ce n'est pas** : le modèle de langage n'est jamais réentraîné. « Apprendre » signifie ici enregistrer des mesures et les relire avant de décider.
 
@@ -159,7 +172,7 @@ Elles sont imposées par le code, quel que soit le modèle de langage :
 ## Tests et démonstration
 
 ```powershell
-C:\MLForge\venv\Scripts\python -m pytest     # 147 tests, environ 5 min ; aucun accès réseau
+C:\MLForge\venv\Scripts\python -m pytest     # 189 tests, environ 5 min ; aucun accès réseau (un test de reprise utilise un serveur HTTP local)
 forge demo                                    # environ 15 s : compétition synthétique, 3 modèles, soumission vérifiée
 ```
 
@@ -168,14 +181,14 @@ Ressources mesurées sur ce PC (Ryzen 7 7445HS, 15 Go) : 2 à 7 s par expérienc
 ## Limites connues
 
 - **API Kaggle** : implémentée et testée sur des réponses simulées. À valider avec votre jeton : forme des réponses et code 403 quand le règlement n'est pas accepté.
-- **Pages en JavaScript** (Kaggle, Zindi…) : leur texte n'est pas lisible sans navigateur. Kaggle passe par l'API ; pour les autres plateformes, ML Forge vous demande de coller le texte des règles ou de déposer les fichiers dans `inbox\`.
+- **Pages en JavaScript** : Kaggle et EvalAI (eval.ai, ITU…) passent par leur API ; les sites des organisateurs cités sont lus. Pour une plateforme sans API lisible (Zindi…), ML Forge vous demande de coller le texte des règles ou de déposer les fichiers dans `inbox\`.
 - **opencode** n'est pas installé sur ce PC : le pilote LLM est testé avec un faux opencode. Le format exact des réponses de votre modèle reste à observer.
 - **Isolation** : elle protège contre les erreurs du code généré, pas contre un code malveillant déterminé (du code natif ou `ctypes` peut contourner les audit hooks). Le Job Object limite quand même la mémoire et interdit les processus enfants. Le parallélisme passe donc par des threads uniquement.
 - **Modalités** :
   - validé : tabulaire (classification, régression, anomalies supervisées), dates, séries temporelles (validation chronologique) ;
-  - assisté : texte (TF-IDF) ;
-  - expérimental : vision et audio. PyTorch n'est pas installé ; il le serait seulement avec votre accord.
-- **Une seule tâche par compétition** : les défis à plusieurs tâches, comme l'exemple ITU, se traitent en projets séparés.
+  - assisté : texte (TF-IDF), audio et images (descripteurs de base joints aux tables ; `pillow` requis pour les images) ;
+  - expérimental : apprentissage profond. PyTorch n'est pas installé ; il le serait seulement avec votre accord.
+- **Une seule tâche par compétition** (plusieurs jeux à prédire sont gérés) : les défis à plusieurs tâches, comme SoM 2026, se traitent en projets séparés.
 - **Notebook de compétition « code »** : généré, mais non exécuté dans l'environnement de la plateforme.
 - **Détection d'injection** : par motifs. La vraie protection est qu'aucune action sensible ne dépend du contenu web.
 

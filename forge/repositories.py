@@ -1,4 +1,4 @@
-"""Data and model repositories cited by a competition: Hugging Face (datasets, models) and GitHub.
+"""Data and model repositories cited by a competition: Hugging Face (datasets, models), GitHub, Zenodo.
 
 Their links carry no file extension, so they are recognised by address, then described through
 their public API: files and sizes, licence, access conditions (a gated repository stays the
@@ -24,7 +24,7 @@ _NOT_A_REPO = {"api", "docs", "blog", "spaces", "settings", "login", "join", "pr
 
 @dataclass(frozen=True)
 class Repository:
-    host: str  # huggingface | github
+    host: str  # huggingface | github | zenodo
     kind: str  # datasets | models | code
     id: str  # owner/name
 
@@ -32,6 +32,8 @@ class Repository:
     def url(self) -> str:
         if self.host == "github":
             return f"https://github.com/{self.id}"
+        if self.host == "zenodo":
+            return f"https://zenodo.org/records/{self.id}"
         prefix = "datasets/" if self.kind == "datasets" else ""
         return f"https://huggingface.co/{prefix}{self.id}"
 
@@ -45,7 +47,12 @@ def parse_repository(url: str) -> Repository | None:
     host = parsed.netloc.lower().removeprefix("www.")
     parts = [part for part in parsed.path.split("/") if part]
     if host == "github.com" and len(parts) >= 2 and parts[0] not in _NOT_A_REPO:
-        return Repository("github", "code", f"{parts[0]}/{parts[1].removesuffix('.git')}")
+        return Repository("github", "code", f"{parts[0]}/{parts[1].split('@')[0].removesuffix('.git')}")
+    if host == "zenodo.org" and len(parts) >= 2 and parts[0] in {"records", "record"} and parts[1].isdigit():
+        return Repository("zenodo", "datasets", parts[1])
+    doi = re.search(r"10\.5281/zenodo\.(\d+)", url)
+    if host in {"doi.org", "dx.doi.org"} and doi:
+        return Repository("zenodo", "datasets", doi.group(1))
     if host == "huggingface.co":
         if len(parts) >= 3 and parts[0] == "datasets":
             return Repository("huggingface", "datasets", f"{parts[1]}/{parts[2]}")
@@ -70,11 +77,18 @@ def repositories_in(pages: list[dict]) -> list[Repository]:
 def describe(web: Web, repository: Repository, notes: list[str]) -> ApiPage | None:
     try:
         if repository.host == "github":
-            return _describe_github(web, repository, notes)
-        return _describe_huggingface(web, repository, notes)
+            page = _describe_github(web, repository, notes)
+        elif repository.host == "zenodo":
+            page = _describe_zenodo(web, repository, notes)
+        else:
+            page = _describe_huggingface(web, repository, notes)
     except NetworkError as exc:
         notes.append(f"{repository.url} : {exc}")
         return None
+    for link in page.links if page else []:
+        if "repository" in link:
+            link["gated"] = page.data["gated"]
+    return page
 
 
 def size_label(size: int) -> str:
@@ -94,13 +108,15 @@ def _json(web: Web, url: str, purpose: str):
         return page.status, None
 
 
-def _file_lines(files: list[tuple[str, int]], link) -> tuple[list[str], list[dict[str, str]]]:
+def _file_lines(files: list[tuple[str, int]], link, repository: Repository) -> tuple[list[str], list[dict]]:
+    """Listing lines, and one link per file carrying what acquisition needs (size, repository)."""
     total = sum(size for _, size in files)
     lines = [f"Fichiers : {len(files)}, taille totale {size_label(total)}"]
     lines += [f"- {path} ({size_label(size)})" for path, size in files[:LISTED_FILES]]
     if len(files) > LISTED_FILES:
         lines.append(f"- … {len(files) - LISTED_FILES} autres fichiers")
-    return lines, [{"url": link(path), "text": path} for path, _ in files]
+    return lines, [{"url": link(path), "text": path, "size": size, "repository": repository.url, "kind": repository.kind}
+                   for path, size in files]
 
 
 def _describe_huggingface(web: Web, repository: Repository, notes: list[str]) -> ApiPage | None:
@@ -125,7 +141,7 @@ def _describe_huggingface(web: Web, repository: Repository, notes: list[str]) ->
              if isinstance(entry, dict) and entry.get("type") == "file"]
     prefix = "datasets/" if repository.kind == "datasets" else ""
     file_lines, links = _file_lines(
-        files, lambda path: f"https://huggingface.co/{prefix}{repository.id}/resolve/main/{quote(path)}")
+        files, lambda path: f"https://huggingface.co/{prefix}{repository.id}/resolve/main/{quote(path)}", repository)
     if info.get("gated"):
         notes.append(f"{repository.url} : accès sur demande (gated={info['gated']}) ; la demande appartient à l'utilisateur.")
     return ApiPage(api, f"Dépôt Hugging Face {repository.id}", "\n".join(lines + file_lines), links,
@@ -149,7 +165,7 @@ def _describe_github(web: Web, repository: Repository, notes: list[str]) -> ApiP
     entries = tree.get("tree", []) if isinstance(tree, dict) else []
     files = [(entry["path"], int(entry.get("size") or 0)) for entry in entries if entry.get("type") == "blob"]
     raw = f"https://raw.githubusercontent.com/{repository.id}/{branch}/"
-    file_lines, links = _file_lines(files, lambda path: raw + quote(path))
+    file_lines, links = _file_lines(files, lambda path: raw + quote(path), repository)
     lines += file_lines
     readme = next((path for path, _ in files if path.lower() in {"readme.md", "readme.rst", "readme.txt", "readme"}), None)
     if readme:
@@ -159,3 +175,35 @@ def _describe_github(web: Web, repository: Repository, notes: list[str]) -> ApiP
             links += [{"url": url, "text": ""} for url in URL_IN_TEXT.findall(page.text)]
     return ApiPage(api, f"Dépôt GitHub {repository.id}", "\n".join(lines), links,
                    {"repository": repository, "files": files, "gated": None})
+
+
+def _describe_zenodo(web: Web, repository: Repository, notes: list[str]) -> ApiPage | None:
+    api = f"https://zenodo.org/api/records/{repository.id}"
+    status, info = _json(web, api, f"Description de l'enregistrement Zenodo {repository.id}")
+    if not isinstance(info, dict):
+        notes.append(f"{repository.url} : enregistrement Zenodo illisible (statut {status}).")
+        return None
+    metadata = info.get("metadata") or {}
+    lines = [f"Enregistrement Zenodo ({repository.label}) : {repository.id}", f"Adresse : {repository.url}"]
+    if metadata.get("title"):
+        lines.append(f'"title": {json.dumps(metadata["title"], ensure_ascii=False)}')
+    access = metadata.get("access_right")
+    if access:
+        lines.append(f'"access_right": {json.dumps(access)}')
+    license_id = (metadata.get("license") or {}).get("id")
+    if license_id:
+        lines.append(f'"license": {json.dumps(license_id)}')
+    entries = [entry for entry in info.get("files") or [] if isinstance(entry, dict) and entry.get("key")]
+    files = [(entry["key"], int(entry.get("size") or 0)) for entry in entries]
+    file_lines, links = _file_lines(files, lambda key: f"{api}/files/{quote(key)}/content", repository)
+    lines += file_lines
+    readme = next((key for key, size in files if key.lower().startswith("readme") and size < README_MAX_CHARS * 4), None)
+    if readme:
+        page = web.read(f"{api}/files/{quote(readme)}/content", f"README de l'enregistrement Zenodo {repository.id}")
+        if page.ok:
+            lines += ["", f"## {readme}", page.text[:README_MAX_CHARS]]
+    gated = None if access in (None, "open") else access
+    if gated:
+        notes.append(f"{repository.url} : accès « {access} » ; la demande appartient à l'utilisateur.")
+    return ApiPage(api, f"Enregistrement Zenodo {repository.id}", "\n".join(lines), links,
+                   {"repository": repository, "files": files, "gated": gated})

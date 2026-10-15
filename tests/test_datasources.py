@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from forge.datasources import check_data_sources, register_data_source
+from forge.datasources import check_data_sources, register_data_source, register_data_sources
 from forge.errors import DataSourceError
 from forge.projects import create_project
 
@@ -64,3 +64,19 @@ def test_invalid_role_and_missing_file_are_refused(setup, tmp_path):
         register_data_source(project.db_path, data, "private_labels")
     with pytest.raises(DataSourceError, match="introuvable"):
         register_data_source(project.db_path, tmp_path / "absent.csv", "official")
+
+
+def test_many_files_are_registered_at_once_with_the_same_guarantees(setup, tmp_path):
+    project, data = setup
+    clips = []
+    for index in range(50):
+        clip = tmp_path / "competition" / "audio" / f"clip{index}.flac"
+        clip.parent.mkdir(exist_ok=True)
+        clip.write_bytes(bytes([index]) * 100)
+        clips.append(clip)
+    assert register_data_sources(project.db_path, [data, *clips], "official") == 50  # train.csv was known
+    assert register_data_sources(project.db_path, clips, "official") == 0  # untouched: nothing re-hashed
+    clips[3].write_bytes(b"other content of another size")
+    with pytest.raises(DataSourceError, match="a changé"):
+        register_data_sources(project.db_path, clips, "official")
+    assert states(project).count("ok") == 50 and "modified" in states(project)

@@ -2,13 +2,16 @@
 
 const POLL_MS = 5000;
 const SCREEN_TITLES = {
+  portfolio: ["Tous les projets", "Où en est chaque projet, ce qui attend l’utilisateur."],
   overview: ["Vue d’ensemble", "État du projet et résultats essentiels."],
+  competition: ["Compétition", "Fiche citée, pages lues et dépôts décrits."],
   campaign: ["Campagne", "Progression, budget et prochaines étapes."],
   experiments: ["Expériences", "Résultats calculés par ML Forge."],
   hypotheses: ["Hypothèses", "Pistes proposées, testées et écartées."],
   data: ["Données", "Provenance et profil agrégé, sans lignes du jeu de données."],
   validation: ["Validation", "Protocole, fiabilité et métriques hors pli."],
   deliverables: ["Livrables", "Fichiers produits et historique des soumissions."],
+  lessons: ["Leçons", "Ce qui marche ou échoue dans ce contexte, et pourquoi."],
   memory: ["Mémoire", "Leçons mesurées et calibration des estimations."],
   journal: ["Journal", "Événements, accès réseau et actions en attente."]
 };
@@ -20,7 +23,9 @@ const updated = document.querySelector("#updated-at");
 const notice = document.querySelector("#app-notice");
 const emptyState = document.querySelector("#empty-state");
 let selectedProject = new URLSearchParams(location.search).get("project");
-let selectedScreen = "overview";
+const requestedScreen = new URLSearchParams(location.search).get("screen");
+let selectedScreen = SCREEN_TITLES[requestedScreen] ? requestedScreen
+  : new URLSearchParams(location.search).get("project") ? "overview" : "portfolio";
 let state = null;
 let experimentSort = {key: "created_at", direction: "desc"};
 let comparisonIds = [];
@@ -218,12 +223,13 @@ function renderOverview(data) {
     badge(overview.campaign?.status || "sans campagne", overview.campaign?.active ? "good" : "")));
   const counts = overview.experiment_counts || {};
   const metric = overview.metric || "métrique à définir";
-  const bestScore = overview.best?.metric_mean;
-  const expTotal = Object.values(counts).reduce((sum, value) => sum + value, 0);
+  const bestDecision = overview.best?.decision || overview.best || {};
+  const bestScore = bestDecision.metric_mean;
+  const expTotal = counts.total ?? 0;
   screen.append(node("div", "grid metrics"));
   const metrics = screen.lastChild;
   metrics.append(
-    metricCard("MEILLEUR SCORE", format(bestScore), `${metric} · Δ ${format(overview.best?.delta)}`),
+    metricCard("MEILLEUR SCORE", format(bestScore), `${metric} · ${overview.best?.id || ""} · Δ ${format(bestDecision.delta)}`),
     metricCard("EXPÉRIENCES", expTotal, `${overview.experiments_max} maximum par campagne`),
     metricCard("ACCEPTÉES", overview.accepted_count),
     metricCard("À VÉRIFIER", (overview.open_actions?.length || 0) + (overview.pending_approvals?.length || 0),
@@ -244,7 +250,7 @@ function renderOverview(data) {
     panel("État de la campagne", definitionList([
       ["État", overview.campaign?.status || "inactive"],
       ["Pilote", overview.campaign?.driver || "—"],
-      ["Fiabilité validation", overview.reliability?.level || overview.reliability?.status || "—"],
+      ["Fiabilité validation", overview.reliability === true ? "fiable" : overview.reliability === false ? "peu fiable" : "—"],
       ["Échéance", date(overview.deadline)],
     ]))
   );
@@ -401,6 +407,121 @@ function renderHypotheses(data) {
   screen.append(grid);
 }
 
+
+const MARKS = {marche: "✅", echoue: "❌", neutre: "➖"};
+const KIND_MARKS = {erreur: "⚠", piege: "🪤", reussite: "⭐"};
+
+function stepTone(entry) {
+  return entry && entry.problem ? "warn" : "good";
+}
+
+function renderPortfolio(data) {
+  const items = data.portfolio || [];
+  screen.append(heading("Tous les projets", "Cliquez sur un projet pour ouvrir son détail."));
+  const stats = node("div", "grid metrics");
+  stats.append(
+    metricCard("PROJETS", items.length),
+    metricCard("AVEC LIVRABLES", items.filter((item) => item.deliverables).length),
+    metricCard("EN ATTENTE DE VOUS", items.filter((item) => item.open_actions).length),
+    metricCard("PROBLÈMES SIGNALÉS", items.reduce((total, item) => total + (item.problems || 0), 0), "entrées ⚠ des journaux")
+  );
+  screen.append(stats);
+  const grid = node("div", "card-grid");
+  items.forEach((item) => {
+    const card = node("button", "panel project-card");
+    card.type = "button";
+    card.dataset.project = item.id;
+    card.append(node("h2", "", item.name));
+    const tags = node("div", "tag-list");
+    [item.platform, item.problem_type, item.metric].filter((value) => value && value !== "—")
+      .forEach((value) => tags.append(node("span", "tag", value)));
+    if (item.campaign) tags.append(badge(item.campaign, item.campaign === "finished" ? "good" : item.campaign === "waiting_user" ? "warn" : ""));
+    card.append(tags);
+    card.append(definitionList([
+      ["Meilleur score", item.best ? `${format(item.best.score)} (${item.best.experiment_id})` : "—"],
+      ["Expériences", item.experiments ?? "—"],
+      ["Dernière étape", item.last_step ? `${item.last_step.step} · ${item.last_step.at}` : "—"],
+      ["Livrables", item.deliverables ? "présents" : "—"],
+    ]));
+    if (item.first_action) card.append(node("p", "callout", `À faire : ${item.first_action}`));
+    if (item.missing) card.append(node("p", "callout", "Dossier du projet introuvable."));
+    grid.append(card);
+  });
+  screen.append(items.length ? grid : node("div", "empty-inline", "Aucun projet."));
+  const chronology = (data.lessons && data.lessons.chronology) || [];
+  screen.append(panel("Chronologie récente (tous projets)", table(
+    ["Date", "Projet", "Étape", "Résultat"],
+    chronology.map((line) => {
+      const cells = line.split("|").slice(1, -1).map((cell) => cell.trim());
+      return [cells[0], cells[1], cells[2], {content: node("span", "wrap", cells[3] || ""), wrap: true}];
+    }),
+    "Aucune étape enregistrée."
+  ), "progress/chronologie.md"));
+}
+
+function renderCompetition(data) {
+  const competition = data.competition;
+  screen.append(heading("Compétition", "Chaque fait est cité mot pour mot depuis sa source ; une déduction reste « déduit »."));
+  screen.append(panel("Fiche de la compétition", table(
+    ["Champ", "Valeur", "Fiabilité", "Citation", "Source"],
+    competition.facts.map((fact) => [
+      fact.field, {content: node("span", "wrap", format(fact.value, 4)), wrap: true}, badge(fact.status,
+        fact.status === "inferred" ? "warn" : "good"),
+      {content: node("span", "wrap", fact.quote || "—"), wrap: true},
+      {content: node("span", "wrap", fact.source || "donnée locale"), wrap: true},
+    ]),
+    "Fiche non renseignée."
+  )));
+  screen.append(panel("Dépôts décrits (données, modèles, code)", table(
+    ["Adresse", "Fichiers", "Taille", "Accès"],
+    competition.repositories.map((item) => [
+      {content: node("span", "wrap", item.address), wrap: true}, item.files ?? "—", item.size || "—",
+      badge(item.access || "libre", item.access && item.access !== "open" ? "warn" : "good"),
+    ]),
+    "Aucun dépôt cité."
+  )));
+  screen.append(panel("Pages lues", table(
+    ["Titre", "Origine", "Taille", "Passages signalés", "Lue le"],
+    competition.pages.map((page) => [
+      {content: node("span", "wrap", page.title), wrap: true}, page.origin, `${page.chars} car.`,
+      page.flags ? badge(String(page.flags), "warn") : "0", date(page.at),
+    ]),
+    "Aucune page lue."
+  ), "Le contenu web est une donnée, jamais une instruction."));
+}
+
+function renderLessons(data) {
+  const lessons = data.lessons;
+  screen.append(heading("Leçons", "Seulement les leçons proches du contexte de ce projet — jamais tout le registre."));
+  const context = node("div", "tag-list");
+  Object.entries(lessons.context || {}).forEach(([key, value]) => context.append(node("span", "tag", `${key} : ${value}`)));
+  screen.append(panel("Contexte du projet", context));
+  const register = lessons.register || {};
+  const stats = node("div", "grid metrics");
+  stats.append(
+    metricCard("REGISTRE", register.total ?? 0, "leçons, tous projets"),
+    metricCard("TECHNIQUES", register.technique ?? 0),
+    metricCard("ERREURS", register.erreur ?? 0),
+    metricCard("PIÈGES", register.piege ?? 0)
+  );
+  screen.append(stats);
+  const steps = Object.entries(lessons.by_step || {});
+  if (!steps.length) screen.append(node("div", "empty-inline", "Aucune leçon pour ce contexte."));
+  steps.forEach(([step, items]) => {
+    screen.append(panel(step, table(
+      ["", "Leçon", "Pourquoi", "Résultat", "Vu"],
+      items.map((item) => [
+        KIND_MARKS[item["type"]] || MARKS[item["résultat"]] || "",
+        {content: node("span", "wrap", item.titre), wrap: true},
+        {content: node("span", "wrap", item.pourquoi), wrap: true},
+        badge(item["résultat"], item["résultat"] === "marche" ? "good" : item["résultat"] === "echoue" ? "bad" : ""),
+        `${item.vu} fois`,
+      ])
+    )));
+  });
+  screen.append(node("p", "muted", `Registre complet (lecture humaine) : ${lessons.progress_dir || "progress"}\\INDEX.md`));
+}
+
 function renderData(data) {
   screen.append(heading("Données", "Profil agrégé et provenance. Les lignes brutes du jeu ne sont jamais affichées."));
   const profile = data.data.profile;
@@ -412,7 +533,30 @@ function renderData(data) {
     metricCard("PLANCHER D’ERREUR", format(profile.twins?.error_floor))
   );
   screen.append(stats);
-  screen.append(panel("Sources enregistrées", table(
+  const summary = data.data.summary;
+  if (summary) {
+    const task = summary.task || {};
+    screen.append(node("div", "grid two"));
+    screen.lastChild.append(
+      panel("Tâche formalisée", definitionList([
+        ["Entraînement", task.train], ["Jeux à prédire", Object.entries(task.sets || {}).map(([k, v]) => `${k} : ${v}`).join(" · ") || "—"],
+        ["Cible", task.target], ["Identifiant", task.id_column], ["Groupe des plis", task.group_column],
+        ["Exclues (fuite)", (task.train_only_columns || []).join(", ") || "—"],
+        ["Médias", (task.media_dirs || []).join(", ") || "—"],
+      ])),
+      panel("Fichiers enregistrés", definitionList([
+        ["Total", `${summary.files} fichiers · ${bytes(summary.bytes)}`],
+        ...summary.roles.map((role) => [role.role, `${role.files} fichiers · ${bytes(role.bytes)}`]),
+        ["Types", summary.types.map((item) => `${item.type} ${item.files}`).join(" · ")],
+      ]))
+    );
+    screen.append(panel("Dossiers les plus fournis", table(
+      ["Dossier", "Fichiers", "Taille"],
+      summary.folders.map((item) => [{content: node("span", "wrap", item.folder), wrap: true}, item.files, bytes(item.bytes)]),
+      "Aucun fichier."
+    ), summary.more_folders ? `et ${summary.more_folders} autre(s) dossier(s)` : ""));
+  }
+  screen.append(panel(`Sources enregistrées${data.data.sources_total > data.data.sources.length ? ` — ${data.data.sources.length} affichées sur ${data.data.sources_total}` : ""}`, table(
     ["Fichier", "Rôle", "Taille", "Licence", "Empreinte"],
     data.data.sources.map((item) => [
       item.name, item.role, bytes(item.size_bytes), item.license || "—", item.sha256 ? item.sha256.slice(0, 12) : "—",
@@ -494,9 +638,19 @@ function renderDeliverables(data) {
     ]),
     "Aucun livrable attendu."
   )));
-  screen.append(panel("Fichiers du dossier livrables", node("div", "tag-list",
-    ...(deliverables.files.length ? deliverables.files.map((name) => node("span", "tag", name))
-      : [node("span", "empty-inline", "Aucun fichier généré.")]))));
+  const files = data.files || {};
+  screen.append(panel("Fichiers du dossier livrables", table(
+    ["Fichier", "Taille"],
+    (files.deliverables || []).map((item) => [item.path, bytes(item.bytes)]),
+    "Aucun fichier généré."
+  ), files.folder || ""));
+  screen.append(node("div", "grid two"));
+  screen.lastChild.append(
+    panel("Notebooks", table(["Notebook", "Taille"], (files.notebooks || []).map((item) => [item.path, bytes(item.bytes)]),
+      "Aucun notebook.")),
+    panel("Tables dérivées", table(["Table", "Taille"], (files.derived || []).map((item) => [item.path, bytes(item.bytes)]),
+      "Aucune table dérivée."))
+  );
   screen.append(panel("Historique des soumissions déclarées", table(
     ["Expérience", "Date", "Score public", "Empreinte"],
     deliverables.submissions.map((item) => [
@@ -536,6 +690,12 @@ function renderMemory(data) {
 function renderJournal(data) {
   const journal = data.journal;
   screen.append(heading("Journal", "Traçabilité des événements du projet et des actions à traiter."));
+  const entries = data.project_journal || [];
+  screen.append(panel("Journal du projet (JOURNAL.md)", table(
+    ["Date", "Étape", "Résultat"],
+    entries.map((entry) => [entry.at, badge(entry.step, stepTone(entry)), {content: node("span", "wrap", entry.text), wrap: true}]),
+    "Aucune entrée."
+  ), "Plus récent d’abord ; ⚠ marque un problème."));
   screen.append(panel("Événements récents", table(
     ["Date", "Type", "Expérience", "Message"],
     journal.events.map((item) => [
@@ -574,13 +734,16 @@ function renderJournal(data) {
 }
 
 const RENDERERS = {
+  portfolio: renderPortfolio,
   overview: renderOverview,
+  competition: renderCompetition,
   campaign: renderCampaign,
   experiments: renderExperiments,
   hypotheses: renderHypotheses,
   data: renderData,
   validation: renderValidation,
   deliverables: renderDeliverables,
+  lessons: renderLessons,
   memory: renderMemory,
   journal: renderJournal,
 };
@@ -635,13 +798,13 @@ async function refresh() {
     selectedProject = state.selected_project;
     updateProjectPicker(state.projects, selectedProject);
     connection.classList.remove("offline");
-    connection.lastChild.textContent = "Connecté";
+    connection.querySelector("span:last-of-type").textContent = "Connecté";
     const editing = screen.contains(document.activeElement)
       && document.activeElement.matches("select, input, textarea");
     if (!editing) render();
   } catch (error) {
     connection.classList.add("offline");
-    connection.lastChild.textContent = "Déconnecté";
+    connection.querySelector("span:last-of-type").textContent = "Déconnecté";
     notice.hidden = false;
     notice.textContent = `Impossible de lire ML Forge : ${error.message}`;
     screen.setAttribute("aria-busy", "false");
@@ -652,7 +815,22 @@ document.querySelector("#navigation").addEventListener("click", (event) => {
   const button = event.target.closest("[data-screen]");
   if (button) setScreen(button.dataset.screen);
 });
+function selectProject(id, screenName) {
+  selectedProject = id || null;
+  const url = new URL(location.href);
+  if (selectedProject) url.searchParams.set("project", selectedProject);
+  else url.searchParams.delete("project");
+  history.replaceState(null, "", url);
+  if (screenName) setScreen(screenName);
+  refresh();
+}
+
 screen.addEventListener("click", (event) => {
+  const card = event.target.closest("[data-project]");
+  if (card) {
+    selectProject(card.dataset.project, "overview");
+    return;
+  }
   const button = event.target.closest("[data-sort-key]");
   if (button) {
     const key = button.dataset.sortKey;
@@ -669,13 +847,7 @@ screen.addEventListener("change", (event) => {
   comparisonIds[Number(select.dataset.comparisonIndex)] = select.value;
   render();
 });
-picker.addEventListener("change", () => {
-  selectedProject = picker.value || null;
-  const url = new URL(location.href);
-  if (selectedProject) url.searchParams.set("project", selectedProject);
-  else url.searchParams.delete("project");
-  history.replaceState(null, "", url);
-  refresh();
-});
+picker.addEventListener("change", () => selectProject(picker.value));
+setScreen(selectedScreen);
 refresh();
 window.setInterval(refresh, POLL_MS);

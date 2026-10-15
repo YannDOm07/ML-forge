@@ -52,6 +52,10 @@ app = FastAPI(
 )
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+# The detailed read-only dashboard (forge ui) is served here too, from the same view model:
+# both front ends show exactly the same state of every project.
+UI_STATIC_DIR = APP_DIR / "ui" / "static"
+app.mount("/ui/static", StaticFiles(directory=UI_STATIC_DIR), name="ui-static")
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 
@@ -101,6 +105,23 @@ async def dashboard(request: Request):
         "dashboard.html",
         {"request": request, "projects": projects, "version": __version__},
     )
+
+
+@app.get("/ui/", response_class=HTMLResponse)
+async def detailed_dashboard():
+    """Detailed dashboard of every project (portfolio, competition, data, lessons, journal…)."""
+    return HTMLResponse((UI_STATIC_DIR / "index.html").read_text(encoding="utf-8"))
+
+
+@app.get("/api/state")
+async def api_state(project_id: str | None = None):
+    """The state shown by the detailed dashboard, built by the shared view model."""
+    from forge.ui.viewmodel import build_viewmodel
+
+    try:
+        return JSONResponse(json.loads(json.dumps(build_viewmodel(_require_workspace(), project_id), default=str)))
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
 
 
 @app.get("/api/projects")

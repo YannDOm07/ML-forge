@@ -48,6 +48,10 @@ def _parser() -> argparse.ArgumentParser:
     create = sub.add_parser("create", help="créer un projet")
     create.add_argument("name")
     create.add_argument("--url", help="lien de la compétition")
+    new = sub.add_parser("new", help="nouveau projet depuis le seul lien : nom, dossiers, lecture, notebooks")
+    new.add_argument("url")
+    new.add_argument("--name", help="nom du projet (défaut : titre de la compétition)")
+    sub.add_parser("notebooks", help="régénérer les notebooks et le README d'un projet").add_argument("project_id")
     listing = sub.add_parser("list", help="lister les projets")
     listing.add_argument("--all", action="store_true", help="inclure les projets archivés")
     status = sub.add_parser("status", aliases=["open"], help="état d'un projet")
@@ -78,7 +82,10 @@ def _parser() -> argparse.ArgumentParser:
     fact.add_argument("value")
     fact.add_argument("--source", required=True, help="URL lue ou user://texte-colle/N")
     fact.add_argument("--quote", required=True, help="passage exact de la source")
-    sub.add_parser("acquire", help="télécharger les données officielles").add_argument("project_id")
+    acquire = sub.add_parser("acquire", help="télécharger les données officielles")
+    acquire.add_argument("project_id")
+    acquire.add_argument("--source", help="dépôt de données à utiliser si le choix automatique ne convient pas")
+    acquire.add_argument("--max-gb", type=float, help="autoriser, pour cette fois, des fichiers jusqu'à cette taille (Go)")
     sub.add_parser("inbox", help="enregistrer les fichiers déposés dans inbox/").add_argument("project_id")
     campaign = sub.add_parser("campaign", help="campagne d'expériences : start, stop, resume, status")
     campaign.add_argument("action", choices=("start", "stop", "resume", "status"))
@@ -98,6 +105,17 @@ def _parser() -> argparse.ArgumentParser:
     submissions.add_argument("--declare", metavar="EXPERIENCE", help="expérience soumise par vous")
     submissions.add_argument("--score", type=float, help="score public obtenu (information seulement)")
     sub.add_parser("memory", help="leçons mesurées et calibration pour un projet").add_argument("project_id")
+    lessons = sub.add_parser("lessons", help="registre des leçons : search, add, render (progress/)")
+    lessons.add_argument("action", choices=("search", "add", "render"))
+    lessons.add_argument("project_id", nargs="?", help="projet dont le contexte sert de filtre (search, add)")
+    lessons.add_argument("--step", help="étape du plan : comprendre … capitaliser")
+    lessons.add_argument("--kind", help="technique, erreur, reussite, piege")
+    lessons.add_argument("--query", help="mots-clés (search)")
+    lessons.add_argument("--title", help="la technique ou l'erreur, en une phrase (add)")
+    lessons.add_argument("--why", help="pourquoi cela marche ou échoue (add, obligatoire)")
+    lessons.add_argument("--outcome", help="marche, echoue, neutre (add)")
+    lessons.add_argument("--scope", default="projet", help="projet, modalite ou general (add)")
+    lessons.add_argument("--limit", type=int, default=8)
     opencode = sub.add_parser("setup-opencode", help="écrire opencode.json (serveur MCP et permissions)")
     opencode.add_argument("--docker", metavar="IMAGE", help="serveur MCP lancé dans l'image Docker (ex. mlforge:1.0.0)")
     ui = sub.add_parser("ui", help="ouvrir l'interface locale en lecture seule")
@@ -157,6 +175,26 @@ def _cmd_config(workspace: Workspace, args: argparse.Namespace) -> int:
 def _cmd_create(workspace: Workspace, args: argparse.Namespace) -> int:
     project = create_project(workspace, args.name, args.url)
     print(f"Projet créé : {project.id}\nDossier : {project.path}")
+    return 0
+
+
+def _cmd_new(workspace: Workspace, args: argparse.Namespace) -> int:
+    from forge.campaign import prepare
+    from forge.organize import create_from_link
+
+    project = create_from_link(workspace, args.url, args.name)
+    print(f"Projet créé : {project.id} ({project.name})\nDossier : {project.path}")
+    result = prepare(workspace, project)
+    print(f"Étape : {result.step}" + (f" — en attente de l'utilisateur :\n{result.message}" if result.blocked else ""))
+    print(f"Journal : {project.path / 'JOURNAL.md'}\nNotebooks : {project.path / 'notebooks'}")
+    return 1 if result.blocked else 0
+
+
+def _cmd_notebooks(workspace: Workspace, args: argparse.Namespace) -> int:
+    from forge.organize import write_notebooks
+
+    for path in write_notebooks(workspace, open_project(workspace, args.project_id)):
+        print(path)
     return 0
 
 
@@ -345,16 +383,25 @@ def _cmd_fact(workspace: Workspace, args: argparse.Namespace) -> int:
 
 
 def _print_acquisition(result) -> int:
+    from collections import Counter
+
     print(result.message)
-    for path in result.files:
-        print(f"  {path}")
+    if result.files:
+        # Thousands of files (audio, images) are summarised by folder and type, never listed one by one.
+        groups = Counter((str(path.parent), path.suffix.lower() or "(sans extension)") for path in result.files)
+        print(f"{len(result.files)} fichier(s) enregistré(s) :")
+        for (folder, suffix), count in groups.most_common(15):
+            print(f"  {count:>6} × {suffix:<8} {folder}")
+        if len(groups) > 15:
+            print(f"  … et {len(groups) - 15} autre(s) dossier(s)")
     return 0 if result.status == "done" else 1
 
 
 def _cmd_acquire(workspace: Workspace, args: argparse.Namespace) -> int:
     from forge.acquisition import acquire_official
 
-    return _print_acquisition(acquire_official(workspace, open_project(workspace, args.project_id)))
+    project = open_project(workspace, args.project_id)
+    return _print_acquisition(acquire_official(workspace, project, source=args.source, max_gb=args.max_gb))
 
 
 def _cmd_inbox(workspace: Workspace, args: argparse.Namespace) -> int:
@@ -427,6 +474,30 @@ def _cmd_submissions(workspace: Workspace, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_lessons(workspace: Workspace, args: argparse.Namespace) -> int:
+    from forge.lessons import brief, project_context, record, render_progress, scoped, search
+
+    if args.action == "render":
+        print(f"Progression régénérée : {render_progress(workspace) / 'INDEX.md'}")
+        return 0
+    if not args.project_id:
+        print("Indiquez le projet : son contexte (modalité, problème, métrique…) filtre les leçons.")
+        return 2
+    project = open_project(workspace, args.project_id)
+    context = project_context(project)
+    if args.action == "search":
+        print(f"Contexte : {', '.join(f'{k} {v}' for k, v in context.items() if v != '*') or 'inconnu'}")
+        print(brief(search(workspace, context, args.step, args.query, args.kind, args.limit)))
+        return 0
+    if not (args.step and args.kind and args.title and args.why):
+        print("add exige --step, --kind, --title et --why.")
+        return 2
+    lesson = record(workspace, args.step, args.kind, args.title, args.why, scoped(context, args.scope), args.outcome,
+                    "agent", project.id)
+    print(f"Leçon {lesson['id']} enregistrée (vue {lesson['vu']} fois) : {lesson['titre']}")
+    return 0
+
+
 def _cmd_memory(workspace: Workspace, args: argparse.Namespace) -> int:
     import json
 
@@ -471,6 +542,8 @@ def _port_number(value: str) -> int:
 COMMANDS = {
     "config": _cmd_config,
     "create": _cmd_create,
+    "new": _cmd_new,
+    "notebooks": _cmd_notebooks,
     "list": _cmd_list,
     "status": _cmd_status,
     "open": _cmd_status,
@@ -496,6 +569,7 @@ COMMANDS = {
     "refuse": _cmd_answer,
     "submissions": _cmd_submissions,
     "memory": _cmd_memory,
+    "lessons": _cmd_lessons,
     "setup-opencode": _cmd_setup_opencode,
     "ui": _cmd_ui,
     "web-server": _cmd_web_server,

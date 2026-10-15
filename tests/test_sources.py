@@ -3,6 +3,8 @@ read from the link alone; access secrets printed on pages are never kept."""
 
 import json
 
+import pytest
+
 from fake_web import FakeTransport, html, json_response, raw
 from forge.db import session
 from forge.intake import competition_card, identify_platform, read_competition, read_url, stored_pages
@@ -110,3 +112,135 @@ def test_agent_reads_a_page_that_becomes_citable(workspace):
     assert report.pages == [page]
     repository = read_url(workspace, project, DATASET, FakeTransport(routes()))
     assert repository.pages == ["https://huggingface.co/api/datasets/lab/cup-data"]
+
+
+# --- an organiser site and Zenodo records: acquisition from the link alone ---------------------
+
+DOCS = "https://lyrics.example.org/docs/cup2"
+CURRENT, OLD = "https://zenodo.org/api/records/222", "https://zenodo.org/api/records/111"
+
+
+def tar_of(files: dict[str, str]) -> bytes:
+    import io
+    import tarfile
+
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as bundle:
+        for name, content in files.items():
+            data = content.encode()
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            bundle.addfile(info, io.BytesIO(data))
+    return buffer.getvalue()
+
+
+def zenodo_routes():
+    challenge = dict(CHALLENGE, title="CUP2 - The 2nd Lyrics Cup", github_repository="", submission_guidelines="",
+                     description=f"<p>See the <a href='{DOCS}/intro'>website</a>, the <a href='{DOCS}/rules'>rules</a>"
+                                 f" and the <a href='https://lyrics.example.org/docs/cup1/intro'>first edition</a>.</p>")
+    archive = tar_of({"train/metadata.csv": "id,score\na,0.5\n", "train/audio/a.flac": "flac"})
+
+    def record(number, title, files):
+        return json_response(json.dumps({"metadata": {"title": title, "access_right": "open", "license": {"id": "cc-by-4.0"}},
+                                         "files": [{"key": key, "size": size} for key, size in files]}))
+
+    return {
+        URL: html("<div ui-view></div>"),
+        f"{SITE}/dist/js/config.min.js": raw(f'{{"API": "{API}"}}', content_type="application/javascript"),
+        f"{API}challenges/challenge/77/": json_response(json.dumps(challenge)),
+        f"{API}challenges/challenge/77/challenge_phase": json_response(json.dumps(PHASES)),
+        f"{DOCS}/intro": html(f"<p>Data: <a href='https://zenodo.org/records/222'>CUP2 data</a>, "
+                              f"<a href='{DOCS}/data'>data</a></p>"),
+        f"{DOCS}/rules": html("<p>Systems are evaluated using the root mean squared error.</p>"),
+        f"{DOCS}/data": html("<p>Older data: <a href='https://zenodo.org/records/111'>CUP1</a></p>"),
+        "https://lyrics.example.org/docs/cup1/intro": html("<p>First edition.</p>"),
+        CURRENT: record(222, "Second Lyrics Cup (CUP2) Dataset",
+                        [("cup2.train.tar.gz", len(archive)), ("cup2.huge.tar.gz", 50 * 1024**3)]),
+        OLD: record(111, "Lyrics Cup (CUP1) Dataset", [("cup1.tar.gz", 10)]),
+        f"{CURRENT}/files/cup2.train.tar.gz/content": raw(archive, content_type="application/octet-stream"),
+    }
+
+
+def test_data_found_through_the_organiser_site_are_downloaded_and_extracted(workspace):
+    from forge.acquisition import acquire_official
+    from forge.actions import open_actions
+
+    project = create_project(workspace, "Lyrics", URL)
+    transport = FakeTransport(zenodo_routes())
+    report = read_competition(workspace, project, transport=transport)
+    # This edition's section is read first; the rules cited there give the metric.
+    assert report.pages.index(f"{DOCS}/intro") < report.pages.index("https://lyrics.example.org/docs/cup1/intro")
+    assert competition_card(project)["fields"]["metric"]["value"] == "rmse"
+    result = acquire_official(workspace, project, transport)
+    # The record matching the competition title is chosen over the first edition's.
+    assert "zenodo.org/records/222" in result.message.split(";")[0]
+    names = sorted(path.name for path in result.files)
+    assert names == ["a.flac", "metadata.csv"]
+    assert not any(path.name.endswith(".tar.gz") for path in result.files[0].parents[2].rglob("*"))
+    # The file above the size limit is listed for the user, never silently dropped.
+    assert result.status == "needs_user" and "cup2.huge.tar.gz" in result.message
+    assert any(action["kind"] == "large_download" for action in open_actions(project))
+    from forge.campaign import next_step
+
+    # Files are registered, but the set is incomplete: the campaign never formalises it.
+    assert next_step(project)[0] == "acquire"
+    downloads = [call for call in transport.calls if call[0] == "DOWNLOAD"]
+    acquire_official(workspace, project, transport)
+    assert [call for call in transport.calls if call[0] == "DOWNLOAD"] == downloads  # extracted once, kept
+
+
+def test_explicit_source_and_unsafe_archives(workspace, tmp_path):
+    import io
+    import tarfile
+
+    from forge.acquisition import acquire_official
+    from forge.errors import ForgeError
+
+    project = create_project(workspace, "Lyrics", URL)
+    routes = zenodo_routes()
+    read_competition(workspace, project, transport=FakeTransport(routes))
+    assert acquire_official(workspace, project, FakeTransport(routes), source="https://zenodo.org/records/999").status == "refused"
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as bundle:
+        info = tarfile.TarInfo("../../evil.txt")
+        info.size = 4
+        bundle.addfile(info, io.BytesIO(b"evil"))
+    routes[f"{OLD}/files/cup1.tar.gz/content"] = raw(buffer.getvalue(), content_type="application/octet-stream")
+    with pytest.raises(ForgeError, match="Archive refusée"):
+        acquire_official(workspace, project, FakeTransport(routes), source="https://zenodo.org/records/111")
+    assert not any(path.name == "evil.txt" for path in workspace.data_dir.parent.rglob("evil.txt"))
+
+
+def test_interrupted_download_is_resumed(workspace):
+    """A real HTTP exchange on the loopback interface: the second run only fetches the missing bytes."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from forge.web import Web
+
+    body = bytes(range(256)) * 400
+    ranges = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            start = int(self.headers.get("Range", "bytes=0-")[6:].rstrip("-"))
+            ranges.append(start)
+            self.send_response(206 if start else 200)
+            self.send_header("Content-Length", str(len(body) - start))
+            self.end_headers()
+            self.wfile.write(body[start:])
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        dest = workspace.data_dir / "resume" / "file.bin"
+        dest.parent.mkdir(parents=True)
+        dest.with_name("file.bin.part").write_bytes(body[:30_000])  # left by an interrupted run
+        result = Web(workspace).download(f"http://127.0.0.1:{server.server_port}/file.bin", dest, "test", 10**6)
+    finally:
+        server.shutdown()
+    assert ranges == [30_000]
+    assert result.status == 206 and dest.read_bytes() == body

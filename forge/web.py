@@ -89,12 +89,19 @@ class UrllibTransport:
             raise NetworkError(f"Accès impossible à {url} : {exc}") from exc
 
     def download(self, url: str, headers: dict[str, str], dest: Path, max_bytes: int) -> HttpResponse:
+        """Stream to `dest`; an existing partial file is resumed when the server accepts ranges."""
+        offset = dest.stat().st_size if dest.exists() else 0
+        request = self._request(url, headers)
+        if offset:
+            request.add_header("Range", f"bytes={offset}-")  # kept across redirects, unlike credentials
         try:
-            with urllib.request.urlopen(self._request(url, headers), timeout=TIMEOUT_S) as response:
-                size = int(response.headers.get("Content-Length") or 0)
+            with urllib.request.urlopen(request, timeout=TIMEOUT_S) as response:
+                resumed = offset > 0 and response.status == 206
+                start = offset if resumed else 0
+                size = int(response.headers.get("Content-Length") or 0) + start
                 if size > max_bytes:
                     raise NetworkError(f"{url} : {size} octets annoncés, limite {max_bytes}.")
-                _stream(response, dest, max_bytes)
+                _stream(response, dest, max_bytes, start)
                 return HttpResponse(response.geturl(), response.status, _lower(response.headers), b"")
         except urllib.error.HTTPError as exc:
             return HttpResponse(url, exc.code, _lower(exc.headers), exc.read(65_536))
@@ -106,9 +113,10 @@ def _lower(headers) -> dict[str, str]:
     return {key.lower(): value for key, value in (headers or {}).items()}
 
 
-def _stream(response, dest: Path, max_bytes: int) -> None:
-    written = 0
-    with dest.open("xb") as handle:
+def _stream(response, dest: Path, max_bytes: int, start: int = 0) -> None:
+    """Write the body to `dest`, appended after `start` bytes already there (else from scratch)."""
+    written = start
+    with dest.open("ab" if start else "wb") as handle:
         while chunk := response.read(_CHUNK):
             written += len(chunk)
             if written > max_bytes:
@@ -263,12 +271,12 @@ class Web:
             raise NetworkError(f"{dest} existe déjà : téléchargement non écrasé.")
         self.ensure_disk_space(max_bytes)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        partial = dest.with_name(dest.name + ".part")
-        partial.unlink(missing_ok=True)
+        partial = dest.with_name(dest.name + ".part")  # kept after an interruption: the next run resumes it
+        if partial.exists():
+            purpose += f" (reprise après {partial.stat().st_size} octets)"
         try:
             response = self.transport.download(url, headers or {}, partial, max_bytes)
         except NetworkError as exc:
-            partial.unlink(missing_ok=True)
             self._log("DOWNLOAD", url, purpose, None, None, str(exc))
             raise
         if not 200 <= response.status < 300:

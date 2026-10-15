@@ -8,6 +8,7 @@ a cycle never depends on a previous conversation (prompt_v2 §2.5).
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -56,6 +57,9 @@ REFERENCE_PLAN = [
 ]
 
 
+ACQUISITION_ACTIONS = {"large_download", "access", "credentials", "accept_rules", "inbox"}
+
+
 class CampaignError(ForgeError):
     """A campaign cannot start or continue."""
 
@@ -78,6 +82,10 @@ def next_step(project: Project) -> tuple[str, str]:
         return "intake", "Lire la compétition (campaign_prepare)."
     if not data_paths(project):
         return "acquire", "Récupérer les données officielles (acquire_official)."
+    pending = [a for a in open_actions(project) if a["kind"] in ACQUISITION_ACTIONS]
+    if pending and latest_protocol(project) is None:
+        # Some files are there, others still wait for the user: never formalise an incomplete set.
+        return "acquire", "Acquisition incomplète : " + pending[0]["message"].splitlines()[-1]
     card = competition_card(project)
     if card["critical_unknowns"]:
         return "intake", "Informations critiques à établir : " + " | ".join(questions(card))
@@ -98,28 +106,66 @@ class Preparation:
     message: str
 
 
+STEP_LABELS = {
+    "intake": "Comprendre", "acquire": "Acquérir", "protocol": "Formaliser et valider",
+    "profile": "Profiler les données", "baseline": "Baseline", "experiment": "Expérimenter",
+}
+
+
 def prepare(workspace: Workspace, project: Project, transport=None) -> Preparation:
-    """Run every step that needs no creativity; stop at the first one that needs the user."""
+    """Run every step that needs no creativity; stop at the first one that needs the user.
+
+    Each step leaves an entry in the project journal, and the notebooks are regenerated."""
+    from forge.organize import journal, write_notebooks
+
+    try:
+        result = _prepare(workspace, project, transport, journal)
+    except Exception as exc:
+        journal(project, STEP_LABELS.get(next_step(project)[0], "Préparation"), f"Erreur : {exc}", problem=True)
+        raise
+    finally:
+        write_notebooks(workspace, project)
+    return result
+
+
+def _prepare(workspace: Workspace, project: Project, transport, journal) -> Preparation:
     for _ in range(10):
         step, message = next_step(project)
+        label = STEP_LABELS.get(step, step)
         if step == "experiment":
             return Preparation(step, False, message)
         if step == "intake" and not _intake_attempted(project):
-            read_competition(workspace, project, transport=transport)
+            report = read_competition(workspace, project, transport=transport)
+            journal(project, label, f"{len(report.pages)} page(s) lue(s), {len(report.repositories)} dépôt(s) décrit(s)."
+                    + "".join(f"\n- {note}" for note in report.notes))
         elif step == "acquire":
             result = acquire_official(workspace, project, transport)
+            journal(project, label, result.message, problem=result.status != "done")
             if result.status != "done":
                 return Preparation(step, True, result.message)
         elif step == "intake":
+            journal(project, label, message, problem=True)
             return Preparation(step, True, message)
         elif step == "protocol":
-            define_protocol(workspace, project, task_from_card(project, data_paths(project)))
+            from forge.formalize import with_media_descriptors
+
+            task = task_from_card(project, data_paths(project))
+            journal(project, "Formaliser", _describe_task(task))
+            if task.media_dirs:
+                task = with_media_descriptors(workspace, project, task, lambda text: journal(project, "Calculer", text))
+            protocol = define_protocol(workspace, project, task)
+            journal(project, "Valider", f"Protocole {protocol.id} ({protocol.scheme}, {len(set(protocol.folds) - {-1})} plis)."
+                    + "".join(f"\n- {note}" for note in protocol.notes)
+                    + f"\n- Fiabilité : {json.dumps(protocol.reliability, ensure_ascii=False)}")
         elif step == "profile":
             profile_data(workspace, project, latest_protocol(project).task)
+            journal(project, label, "Profil des données calculé.")
         elif step == "baseline":
             outcome = _run_builtin(workspace, project, "baseline", "Une prédiction constante donne le score plancher.", 0.0, "baseline")
             if outcome.status != "completed":
+                journal(project, label, f"La baseline a échoué : {outcome.message}", problem=True)
                 return Preparation(step, True, f"La baseline a échoué : {outcome.message}")
+            journal(project, label, f"Baseline exécutée : {outcome.message}")
     raise CampaignError("La préparation ne progresse plus ; consultez le journal du projet.")
 
 
@@ -373,8 +419,13 @@ def run_campaign(workspace: Workspace, project: Project, driver, mode: str = "un
         if reason is None:  # paused: the LLM is unavailable
             return active_campaign(project)
         from forge.deliverables import finalize
+        from forge.organize import journal, write_notebooks
 
         result = finalize(workspace, project)
+        journal(project, "Livrer", f"{reason} {result.summary}"
+                + "".join(f"\n- {path}" for path in result.files)
+                + "".join(f"\n- ⚠ {problem}" for problem in result.problems), problem=bool(result.problems))
+        write_notebooks(workspace, project)
         _set_status(project, campaign["id"], "finished", f"{reason} {result.summary}")
     with session(project.db_path) as conn:
         return dict(conn.execute("SELECT * FROM campaigns WHERE id = ?", (campaign["id"],)).fetchone())
@@ -389,6 +440,7 @@ def _cycles(workspace, project, driver, campaign, sleep, now) -> str | None:
         before = len(list_experiments(project.db_path))
         result = driver.run_cycle(workspace, project)
         log_event(project.db_path, None, f"cycle:{result.kind}", result.message[:1000] or result.kind)
+        _journal_cycle(project, result, before)
         if result.kind in {"rate_limited", "unavailable", "error"}:
             failures += 1
             if result.kind == "unavailable" or failures >= MAX_LLM_FAILURES:
@@ -404,6 +456,25 @@ def _cycles(workspace, project, driver, campaign, sleep, now) -> str | None:
         idle = idle + 1 if len(list_experiments(project.db_path)) == before else 0
         if idle >= MAX_IDLE_CYCLES:
             return f"{idle} cycles sans nouvelle expérience."
+
+
+def _journal_cycle(project: Project, result, before: int) -> None:
+    """One journal entry per cycle: each new experiment, its score and its computed decision."""
+    from forge.organize import journal
+    from forge.report import decisions_by_experiment
+
+    new = list_experiments(project.db_path)[before:]
+    decisions = decisions_by_experiment(project)
+    lines = []
+    for experiment in new:
+        decision = decisions.get(experiment.id) or {}
+        score = "" if decision.get("metric_mean") is None else f" : {decision['metric_mean']:.5f}"
+        delta = "" if decision.get("delta") is None else f" (Δ {decision['delta']:+.5f})"
+        lines.append(f"- {experiment.id} {experiment.method}{score}{delta} — {decision.get('status') or experiment.status}. "
+                     f"Hypothèse : {experiment.hypothesis[:160]}")
+    if lines or result.kind not in {"ok", "exhausted"}:
+        journal(project, "Expérimenter", "\n".join(lines) or result.message,
+                problem=result.kind in {"rate_limited", "unavailable", "error"})
 
 
 # --- the compact state given to each cycle ----------------------------------------------------
@@ -438,8 +509,14 @@ def campaign_summary(workspace: Workspace, project: Project) -> dict:
             "sans_gain_consécutives": trailing,
         }
     from forge.knowledge import memory_digest
+    from forge.lessons import project_context, search
 
     summary["mémoire"] = memory_digest(workspace, project)
+    lesson_step = {"intake": "comprendre", "acquire": "acquerir", "protocol": "formaliser", "profile": "formaliser",
+                   "baseline": "experimenter", "experiment": "experimenter"}.get(step, "comprendre")
+    summary["leçons_de_l_étape"] = [
+        f"{l['titre']} — {l['pourquoi'][:200]} ({l['résultat']}, vu {l['vu']} fois)"
+        for l in search(workspace, project_context(project), step=lesson_step, limit=5)]
     return summary
 
 
@@ -510,3 +587,17 @@ def render_summary(summary: dict, max_chars: int) -> str:
 
 def data_ready(project: Project) -> bool:
     return bool(data_paths(project)) and all(s.state == "ok" for s in check_data_sources(project.db_path))
+
+
+def _describe_task(task) -> str:
+    sets = ", ".join(f"{name} ({Path(path).name})" for name, path in task.sets().items()) or "aucun"
+    lines = [
+        f"Problème {task.problem_type}, cible {task.target}, métrique {task.metric}.",
+        f"Entraînement : {Path(task.train_path).name} ; jeux à prédire : {sets}.",
+        f"Identifiant : {task.id_column or '—'} ; groupe des plis : {task.group_column or '—'}.",
+    ]
+    if task.train_only_columns:
+        lines.append("Colonnes propres à l'entraînement, exclues des variables (fuite) : " + ", ".join(task.train_only_columns))
+    if task.media_dirs:
+        lines.append(f"Médias : {len(task.media_dirs)} dossier(s) ; descripteurs calculés à l'étape Calculer.")
+    return "\n".join(lines)

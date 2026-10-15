@@ -3,3 +3,5 @@ numpy==2.5.2
 scipy==1.16.3
 pandas==2.3.3
 scikit-learn==1.7.2
+# Lecture audio (descripteurs des médias, étape « Calculer »).
+soundfile==0.14.0

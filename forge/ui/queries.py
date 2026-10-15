@@ -210,6 +210,53 @@ def get_web_pages(project_db: Path) -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
+def get_page_index(project_db: Path) -> list[dict[str, Any]]:
+    """Latest version of each page read: metadata and size only (text stays on the server)."""
+    with _connect_ro(project_db) as conn:
+        rows = conn.execute(
+            "SELECT url, origin, status, title, length(text) AS chars, flags_json, fetched_at, "
+            "substr(text, 1, 700) AS head FROM web_pages "
+            "WHERE id IN (SELECT MAX(id) FROM web_pages GROUP BY url) ORDER BY id"
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_data_source_rows(project_db: Path) -> list[tuple[str, str, int]]:
+    """(role, path, size) of every registered file, aggregated by the caller, never sent whole."""
+    with _connect_ro(project_db) as conn:
+        return conn.execute("SELECT role, path, size_bytes FROM data_sources").fetchall()
+
+
+def get_data_source_version(project_db: Path) -> tuple[int, int]:
+    """(count, last id) of the registered files: changes whenever a file is registered."""
+    with _connect_ro(project_db) as conn:
+        row = conn.execute("SELECT COUNT(*), COALESCE(MAX(id), 0) FROM data_sources").fetchone()
+    return int(row[0]), int(row[1])
+
+
+TABLE_SUFFIX_SQL = " OR ".join(f"lower(path) LIKE '%{suffix}'" for suffix in
+                               (".csv", ".tsv", ".json", ".jsonl", ".parquet", ".feather"))
+
+
+def get_data_sources_shown(project_db: Path, limit: int) -> list[dict[str, Any]]:
+    """The files worth listing: tables first, then the largest ones."""
+    with _connect_ro(project_db) as conn:
+        rows = conn.execute(
+            "SELECT id, role, path, sha256, size_bytes, license FROM data_sources "
+            f"ORDER BY CASE WHEN {TABLE_SUFFIX_SQL} THEN 0 ELSE 1 END, size_bytes DESC LIMIT ?", (limit,)
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_lessons(global_db: Path) -> list[sqlite3.Row]:
+    """Lessons register (techniques, mistakes, traps); empty before the v4 schema."""
+    try:
+        with _connect_ro(global_db) as conn:
+            return conn.execute("SELECT * FROM lessons").fetchall()
+    except sqlite3.OperationalError:
+        return []
+
+
 def get_compliance_log(project_db: Path) -> list[dict[str, Any]]:
     """Compliance log entries."""
     with _connect_ro(project_db) as conn:

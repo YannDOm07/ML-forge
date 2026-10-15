@@ -10,6 +10,7 @@ dependencies = [
     "scipy==1.16.3",
     "pandas==2.3.3",
     "scikit-learn==1.7.2",
+    "soundfile==0.14.0",
 ]
 
 [project.optional-dependencies]
@@ -22,4 +23,5 @@ pythonpath = [".", "tests"]
 addopts = "-q"
 
 [tool.setuptools.package-data]
+"forge" = ["seed_lessons.json"]
 "forge.ui" = ["static/*.html", "static/*.css", "static/*.js"]

@@ -5,7 +5,9 @@ Contract for every experiment script (built-in or generated):
 - write `oof.csv`: one row per training row, in order, with columns 'p:<class>' (classification)
   or 'prediction' (regression), predicted by a model that never trained on that row
   (use `training_mask`: with a time scheme, only the past is used);
-- optionally write `test_pred.csv`: the id column then the same prediction columns;
+- optionally write `test_pred.csv`: the id column then the same prediction columns; when the
+  task names several prediction sets, one file per set (`context["outputs"]["sets"]`);
+- media files (audio, images) referred to by the tables are readable in `task["media_dirs"]`;
 - optionally write `info.json` (model, parameters, features).
 ML Forge computes the metrics itself from `oof.csv`; scripts never report their own score.
 This module must stay importable on its own: it only imports `forge` inside lab-only functions.
@@ -34,7 +36,7 @@ from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
 
-from forge.task import PROBA_PREFIX
+from forge.task import PROBA_PREFIX, read_table
 
 CONTEXT_FILE = "context.json"
 DATE_PARTS = ("year", "month", "day", "dayofweek", "hour")
@@ -48,15 +50,26 @@ def load_context() -> dict:
 
 
 def load_data(context: dict) -> tuple[pd.DataFrame, pd.DataFrame | None]:
+    """The training table and the primary prediction set."""
     task = context["task"]
-    train = pd.read_csv(task["train_path"], low_memory=False)
-    test = pd.read_csv(task["test_path"], low_memory=False) if task.get("test_path") else None
+    train = read_table(task["train_path"])
+    test = read_table(task["test_path"]) if task.get("test_path") else None
     return train, test
 
 
+def load_prediction_sets(context: dict) -> dict[str, pd.DataFrame]:
+    """Every set to predict, by name, the primary one first."""
+    sets = context["task"].get("prediction_sets") or (
+        {"test": context["task"]["test_path"]} if context["task"].get("test_path") else {})
+    primary = context["task"].get("test_path")
+    ordered = sorted(sets.items(), key=lambda item: item[1] != primary)
+    return {name: read_table(path) for name, path in ordered}
+
+
 def feature_names(context: dict, train: pd.DataFrame) -> list[str]:
+    """Usable columns: not the target, id or group, and never a column the training table alone has."""
     task = context["task"]
-    excluded = {task["target"], task.get("id_column"), task.get("group_column")}
+    excluded = {task["target"], task.get("id_column"), task.get("group_column"), *task.get("train_only_columns", ())}
     return [column for column in train.columns if column not in excluded]
 
 
@@ -76,10 +89,17 @@ def training_mask(context: dict, folds: np.ndarray, fold: int) -> np.ndarray:
     return folds != fold
 
 
-def save_predictions(context: dict, oof: pd.DataFrame, test: pd.DataFrame | None = None, info: dict | None = None) -> None:
+def save_predictions(context: dict, oof: pd.DataFrame, test: pd.DataFrame | None = None, info: dict | None = None,
+                     sets: dict[str, pd.DataFrame] | None = None) -> None:
+    """Write out-of-fold predictions, the primary test predictions and, by name, the other sets."""
     oof.to_csv(context["outputs"]["oof"], index=False)
     if test is not None:
         test.to_csv(context["outputs"]["test"], index=False)
+    files = context["outputs"].get("sets", {})
+    for name, frame in (sets or {}).items():
+        if name not in files:
+            raise ValueError(f"Jeu de prédiction inconnu : {name} (attendus : {', '.join(files)}).")
+        frame.to_csv(files[name], index=False)
     if info is not None:
         Path(context["outputs"]["info"]).write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -111,8 +131,14 @@ def column_kind(series: pd.Series) -> str:
 
 def prepare_frames(train: pd.DataFrame, test: pd.DataFrame | None, features: list[str]):
     """Dates become numeric parts; text gets length features and is kept for TF-IDF models."""
+    train, others, kept, text = prepare_all(train, [] if test is None else [test], features)
+    return train, (others[0] if test is not None else None), kept, text
+
+
+def prepare_all(train: pd.DataFrame, others: list[pd.DataFrame], features: list[str]):
+    """`prepare_frames` for the training table and any number of sets to predict."""
     kinds = {column: column_kind(train[column]) for column in features}
-    frames = [train.copy()] + ([test.copy()] if test is not None else [])
+    frames = [train.copy()] + [frame.copy() for frame in others]
     derived = []
     for column, kind in kinds.items():
         if kind == "datetime":
@@ -130,7 +156,7 @@ def prepare_frames(train: pd.DataFrame, test: pd.DataFrame | None, features: lis
             derived += [f"{column}__chars", f"{column}__words"]
     kept = [c for c in features if kinds[c] != "datetime"] + derived
     text = [c for c in features if kinds[c] == "text"]
-    return frames[0], (frames[1] if test is not None else None), kept, text
+    return frames[0], frames[1:], kept, text
 
 
 # --- built-in models ----------------------------------------------------------------------
@@ -225,27 +251,33 @@ def run_builtin(name: str, params: dict | None = None) -> None:
     """Train a built-in model fold by fold; test predictions average the fold models."""
     params = params or {}
     context = load_context()
-    train, test = load_data(context)
-    train, test, features, text = prepare_frames(train, test, feature_names(context, train))
+    train, _ = load_data(context)
+    raw_sets = load_prediction_sets(context)
+    train, prepared, features, text = prepare_all(train, list(raw_sets.values()), feature_names(context, train))
+    sets = dict(zip(raw_sets, prepared))
     classes = context.get("classes")
     target = train[context["task"]["target"]]
     target = target.astype(str) if classes else target
     folds = np.asarray(context["folds"])
     columns = prediction_columns(context)
     oof = np.zeros((len(train), len(columns)))
-    test_sum = None if test is None else np.zeros((len(test), len(columns)))
+    sums = {set_name: np.zeros((len(frame), len(columns))) for set_name, frame in sets.items()}
     for fold in validation_folds(folds):
         fit_rows, valid_rows = training_mask(context, folds, fold), folds == fold
         pipeline = build_pipeline(name, context, train, features, text, params)
         pipeline.fit(train.loc[fit_rows, features], target[fit_rows])
         oof[valid_rows] = _predict(pipeline, train.loc[valid_rows, features], classes)
-        if test is not None:
-            test_sum += _predict(pipeline, test[features], classes)
+        for set_name, frame in sets.items():
+            sums[set_name] += _predict(pipeline, frame[features], classes)
+    count = len(validation_folds(folds))
+    frames = {set_name: _test_frame(context, sets[set_name], total / count, columns) for set_name, total in sums.items()}
+    primary = next(iter(frames), None)
     save_predictions(
         context,
         pd.DataFrame(oof, columns=columns),
-        _test_frame(context, test, test_sum / len(validation_folds(folds)) if test is not None else None, columns),
+        frames.get(primary),
         {"model": name, "params": params, "features": features},
+        {set_name: frame for set_name, frame in frames.items() if set_name != primary},
     )
 
 

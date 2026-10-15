@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
@@ -23,18 +24,20 @@ from forge.errors import ForgeError
 from forge.experiments import log_event
 from forge.kaggle import KaggleClient, files_url, load_credentials, metadata_url
 from forge.projects import Project
-from forge.task import PROBLEM_TYPES, TaskSpec
+from forge.task import PROBLEM_TYPES, TABLE_FORMATS, TaskSpec, read_table
 from forge.repositories import SUBMISSION_EXAMPLE, describe, parse_repository, repositories_in, size_label
 from forge.web import NetworkError, Web, WebPage, injection_flags, redact_secrets
 from forge.workspace import Workspace
 
 MAX_PAGES = 15
 MAX_REPOSITORIES = 10
+REPOSITORY_PRIORITY = {"datasets": 0, "models": 1, "code": 2}  # data first: the budget is small
 RULE_CHOICES = ("allowed", "forbidden", "conditional", "unknown")
 STATUS_RANK = {"inferred": 0, "found": 1, "user": 2}
 FOLLOW_KEYWORDS = (
     "rule", "data", "evaluat", "overview", "faq", "timeline", "submission", "github", "starter",
     "guideline", "regle", "règle", "donnee", "donnée", "evaluation", "évaluation",
+    "baseline", "intro", "task", "download", "take_part", "participat", "date",
 )
 DATA_EXTENSIONS = (".csv", ".zip", ".parquet", ".json", ".tsv", ".txt", ".gz", ".npy", ".npz", ".feather")
 FOLLOW_HOSTS = ("github.com", "raw.githubusercontent.com", "huggingface.co")
@@ -65,8 +68,10 @@ FIELDS: dict[str, Field] = {
     ),
     "target": Field("Colonne cible", "text", critical=True),
     "id_column": Field("Colonne identifiant", "text"),
+    "group_column": Field("Colonne de groupe (plis de validation)", "text"),
     "metric": Field("Métrique officielle", "text", critical=True),
     "submission_format": Field("Format de soumission (fichier exemple)", "text", critical=True),
+    "submission_spec": Field("Spécification de soumission (JSON : fichiers, colonnes, échelle)", "text"),
     "deliverables": Field("Livrables exigés", "list"),
     "rules.external_data": Field("Données externes", "choice", RULE_CHOICES),
     "rules.pretrained_models": Field("Modèles préentraînés", "choice", RULE_CHOICES),
@@ -173,6 +178,8 @@ def record_fact(project: Project, name: str, value, source_url: str, quote: str,
                 " VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (name, json.dumps(value, ensure_ascii=False), status, source_url, quote.strip(), recorded_by, now_iso()),
             )
+    if spec.critical and status != "inferred" and not competition_card(project)["critical_unknowns"]:
+        resolve_actions(project, "intake")  # the card is complete: nothing waits for the user any more
     return {"field": name, "value": value, "status": status, "source_url": source_url, "quote": quote.strip()}
 
 
@@ -185,6 +192,15 @@ def _validate(name: str, spec: Field, value):
     value = str(value).strip()
     if not value:
         raise IntakeError(f"{name} : valeur vide.")
+    if name == "submission_spec":
+        import json
+
+        from forge.submission import SubmissionError, parse_spec
+
+        try:
+            return json.dumps(parse_spec(value), ensure_ascii=False, sort_keys=True)
+        except SubmissionError as exc:
+            raise IntakeError(str(exc)) from None
     if spec.choices and value not in spec.choices:
         raise IntakeError(f"{name} : « {value} » n'est pas parmi {', '.join(spec.choices)}.")
     return value
@@ -273,11 +289,12 @@ def read_competition(workspace: Workspace, project: Project, url: str | None = N
     report = IntakeReport(platform)
     for page in _crawl(web, url, workspace.config.get("acquisition", "link_depth"), report.notes):
         _keep(project, report, page.url, "web", page.text, page.title, page.status, page.links, page.flags)
-    platform_pages = 0
+    platform_pages: list[ApiPage] = []
     if platform.name == "kaggle":
         _read_kaggle(project, web, platform.slug, report.notes)
     elif platform.name == "evalai":
         platform_pages = _read_evalai(project, web, url, report)
+    _read_cited_sites(project, web, platform_pages, workspace.config.get("acquisition", "link_depth"), report)
     if report.pages and not platform_pages and len(latest_page(project, report.pages[0])["text"]) < 300:
         report.notes.append("Page principale presque vide (JavaScript ou connexion requise) : collez le texte des règles.")
     _read_repositories(project, web, report)
@@ -335,7 +352,7 @@ def _keep_api(project: Project, report: IntakeReport, page: ApiPage) -> None:
     _keep(project, report, page.url, "api", page.text, page.title, 200, page.links, injection_flags(page.text))
 
 
-def _read_evalai(project: Project, web: Web, url: str, report: IntakeReport) -> int:
+def _read_evalai(project: Project, web: Web, url: str, report: IntakeReport) -> list[ApiPage]:
     """EvalAI front ends carry no text: read the challenge and its phases through the API."""
     pages = read_challenge(web, url, report.notes)
     for page in pages:
@@ -366,7 +383,31 @@ def _read_evalai(project: Project, web: Web, url: str, report: IntakeReport) -> 
         if isinstance(phase.get("max_submissions_per_day"), int):
             record_fact(project, "rules.daily_submission_limit", phase["max_submissions_per_day"], phases.url,
                         phase_quote("max_submissions_per_day"), "evalai-api")
-    return len(pages)
+    return pages
+
+
+def _read_cited_sites(project: Project, web: Web, platform_pages: list[ApiPage], depth: int,
+                      report: IntakeReport) -> None:
+    """Organisers often keep the real instructions (data, rules, baseline) on their own site, cited
+    by the platform. Read those sites, each one within the section of the cited page."""
+    platform_hosts = {urlparse(page.url).netloc.lower() for page in platform_pages}
+    seen = set(report.pages)
+    candidates = []
+    for link in (link for page in platform_pages for link in page.links):
+        target = urlparse(link["url"])
+        if target.scheme in {"http", "https"} and target.netloc.lower() not in platform_hosts                 and not parse_repository(link["url"]):
+            prefix = "/".join(target.path.split("/")[:3]) + "/" if target.path.count("/") >= 3 else "/"
+            candidates.append((link["url"].split("#")[0], (target.netloc.lower(), prefix)))
+    # The section the platform cites most is this edition's; an older edition is cited once in passing.
+    citations = Counter(section for _, section in candidates)
+    for url, section in sorted(candidates, key=lambda candidate: -citations[candidate[1]]):
+        budget = MAX_PAGES - (len(report.pages) - len(platform_pages))
+        if budget <= 0:
+            return
+        if url in seen:
+            continue
+        for page in _crawl(web, url, depth, report.notes, budget, section[1], seen):
+            _keep(project, report, page.url, "web", page.text, page.title, page.status, page.links, page.flags)
 
 
 def _read_repositories(project: Project, web: Web, report: IntakeReport) -> None:
@@ -374,6 +415,7 @@ def _read_repositories(project: Project, web: Web, report: IntakeReport) -> None
     described: set = set()
     for _ in range(MAX_REPOSITORIES):
         pending = [repo for repo in repositories_in(stored_pages(project)) if repo not in described]
+        pending.sort(key=lambda repo: REPOSITORY_PRIORITY[repo.kind])
         if not pending:
             return
         repository = pending[0]
@@ -393,10 +435,13 @@ def _read_repositories(project: Project, web: Web, report: IntakeReport) -> None
                             inferred=repository.kind != "datasets")
 
 
-def _crawl(web: Web, start: str, depth: int, notes: list[str]) -> list[WebPage]:
+def _crawl(web: Web, start: str, depth: int, notes: list[str], limit: int = MAX_PAGES, prefix: str | None = None,
+           seen: set | None = None) -> list[WebPage]:
+    """Breadth-first reading from `start`; with `prefix`, only pages of that section of the site."""
     host = urlparse(start).netloc.lower()
-    queue, seen, pages = [(start, 0)], set(), []
-    while queue and len(pages) < MAX_PAGES:
+    queue, pages = [(start, 0)], []
+    seen = set() if seen is None else seen
+    while queue and len(pages) < limit:
         url, level = queue.pop(0)
         url = url.split("#")[0]
         if url in seen:
@@ -412,16 +457,18 @@ def _crawl(web: Web, start: str, depth: int, notes: list[str]) -> list[WebPage]:
             continue
         pages.append(page)
         if level < depth:
-            queue += [(link["url"], level + 1) for link in page.links if _follow(link, host)]
+            queue += [(link["url"], level + 1) for link in page.links if _follow(link, host, prefix)]
     return pages
 
 
-def _follow(link: dict, host: str) -> bool:
+def _follow(link: dict, host: str, prefix: str | None = None) -> bool:
     target = urlparse(link["url"])
     if target.scheme not in {"http", "https"} or target.path.lower().endswith(DATA_EXTENSIONS):
         return False
     target_host = target.netloc.lower()
     related = target_host == host or target_host.endswith("." + host.removeprefix("www.")) or target_host in FOLLOW_HOSTS
+    if prefix is not None and (target_host != host or not target.path.startswith(prefix)):
+        return False
     words = (link["url"] + " " + link.get("text", "")).lower()
     return related and any(keyword in words for keyword in FOLLOW_KEYWORDS)
 
@@ -575,7 +622,7 @@ def classify_files(paths: list[Path]) -> dict[str, Path]:
     found: dict[str, Path] = {}
     for path in sorted(paths, key=lambda p: len(p.name)):
         name = path.name.lower()
-        if not name.endswith(".csv"):
+        if not name.endswith(TABLE_FORMATS):
             continue
         if "sample" in name or "submission" in name:
             found.setdefault("sample", path)
@@ -587,12 +634,14 @@ def classify_files(paths: list[Path]) -> dict[str, Path]:
 
 
 def infer_from_data(project: Project, paths: list[Path]) -> None:
-    """Facts measured on the files themselves: sample columns, target values."""
+    """Facts measured on the files themselves: sample columns, target values; without a sample
+    submission, the layout of the tables (step 4, `forge.formalize`)."""
     files = classify_files(paths)
     if "sample" not in files:
+        _infer_from_layout(project, paths)
         return
     sample = files["sample"]
-    columns = list(pd.read_csv(sample, nrows=5).columns)
+    columns = list(read_table(sample, nrows=5).columns)
     evidence = f"Fichier {sample.name} — colonnes : {', '.join(map(str, columns))}"
     url = sample.resolve().as_uri()
     store_page(project, url, "data", evidence, sample.name)
@@ -601,15 +650,40 @@ def infer_from_data(project: Project, paths: list[Path]) -> None:
     if len(columns) != 2 or "train" not in files:
         return
     target = str(columns[1])
-    train_columns = list(pd.read_csv(files["train"], nrows=0).columns)
+    train_columns = list(read_table(files["train"], nrows=5).columns)
     if target not in train_columns:
         return
     record_fact(project, "target", target, url, evidence, "données")
     _infer_problem_type(project, files["train"], target)
 
 
+def _infer_from_layout(project: Project, paths: list[Path]) -> None:
+    from forge.formalize import discover, infer
+
+    layout = discover(paths)
+    if layout.train is None:
+        return
+    result = infer(layout, [page for page in stored_pages(project) if page["origin"] in {"web", "api", "user"}])
+    for note in result.notes:
+        log_event(project.db_path, None, "formalisation", note)
+    if result.target:
+        target, evidence = result.target
+        url = layout.train.resolve().as_uri() + "#layout"
+        store_page(project, url, "data", evidence, layout.train.name)
+        record_fact(project, "target", target, url, evidence, "données", inferred=not result.target_sure)
+        _infer_problem_type(project, layout.train, target)
+    if result.id_column:
+        column, evidence = result.id_column
+        url = layout.train.resolve().as_uri() + "#id"
+        store_page(project, url, "data", evidence, layout.train.name)
+        record_fact(project, "id_column", column, url, evidence, "données")
+    if result.group_column:
+        column, url, quote = result.group_column
+        record_fact(project, "group_column", column, url, quote, "extraction")
+
+
 def _infer_problem_type(project: Project, train: Path, target: str) -> None:
-    values = pd.read_csv(train, usecols=[target], low_memory=False)[target].dropna()
+    values = read_table(train, usecols=[target])[target].dropna()
     distinct = values.nunique()
     numeric = pd.api.types.is_numeric_dtype(values)
     integral = numeric and bool((values == values.round()).all())
@@ -630,15 +704,17 @@ def _infer_problem_type(project: Project, train: Path, target: str) -> None:
 
 def task_from_card(project: Project, paths: list[Path]) -> TaskSpec:
     """Build the task of a competition whose card is complete."""
+    from forge.formalize import build_task, discover
+
     card = assert_ready(project)
-    files = classify_files(paths)
-    if "train" not in files:
+    layout = discover(paths)
+    if layout.train is None:
         raise IntakeError("Fichier d'entraînement introuvable parmi les données enregistrées.")
-    return TaskSpec(
-        problem_type=fact_value(card, "problem_type"),
-        target=fact_value(card, "target"),
-        metric=fact_value(card, "metric"),
-        train_path=str(files["train"]),
-        test_path=str(files["test"]) if "test" in files else None,
-        id_column=fact_value(card, "id_column"),
+    target = fact_value(card, "target")
+    train_columns = layout.columns[layout.train]
+    common = set.intersection(*(set(layout.columns[p]) for p in layout.sets.values())) if layout.sets else set(train_columns)
+    group = fact_value(card, "group_column")
+    return build_task(
+        layout, fact_value(card, "problem_type"), target, fact_value(card, "metric"), fact_value(card, "id_column"),
+        group if group in train_columns else None, [c for c in train_columns if c not in common],
     )

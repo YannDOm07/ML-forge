@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from forge.data_engine import profile, read_table
+from forge.data_engine import profile
 from forge.datasources import check_data_sources
 from forge.db import now_iso, session, transaction
 from forge.errors import ExperimentError
@@ -28,7 +28,7 @@ from forge.experiments import (
 )
 from forge.projects import Project
 from forge.sandbox import SandboxLimits, run_in_sandbox
-from forge.task import PROBA_PREFIX, TaskSpec
+from forge.task import PROBA_PREFIX, TaskSpec, read_table
 from forge.workspace import Workspace
 
 KEPT_DECISIONS = {"baseline", "accepted"}
@@ -64,7 +64,7 @@ def define_protocol(
     """Fix the validation folds of a task once; the same task and data give the same protocol id."""
     _require_clean_sources(project, task)
     columns = [c for c in (task.target, task.group_column, task.time_column) if c]
-    train = pd.read_csv(task.train_path, usecols=columns, low_memory=False)
+    train = read_table(task.train_path, usecols=columns)
     y = train[task.target]
     groups = train[task.group_column] if task.group_column else None
     times = train[task.time_column] if task.time_column else None
@@ -109,9 +109,11 @@ def latest_protocol(project: Project) -> Protocol | None:
 def dataset_hash(project: Project, task: TaskSpec) -> str:
     """Fingerprint of the registered files the task reads."""
     wanted = {str(path.resolve()) for path in task.data_paths()}
+    media = [str(Path(directory).resolve()) for directory in task.media_dirs]
     with session(project.db_path) as conn:
         rows = conn.execute("SELECT path, sha256 FROM data_sources ORDER BY path").fetchall()
-    known = {row["path"]: row["sha256"] for row in rows if row["path"] in wanted}
+    known = {row["path"]: row["sha256"] for row in rows
+             if row["path"] in wanted or any(row["path"].startswith(directory) for directory in media)}
     missing = wanted - set(known)
     if missing:
         raise ExperimentError(f"Fichier(s) non enregistré(s) comme source de données : {', '.join(sorted(missing))}")
@@ -121,10 +123,10 @@ def dataset_hash(project: Project, task: TaskSpec) -> str:
 def profile_data(workspace: Workspace, project: Project, task: TaskSpec) -> dict:
     _require_clean_sources(project, task)
     max_rows = workspace.config.get("data", "profile_max_rows")
-    train = read_table(task.train_path, max_rows + 1)
+    train = read_table(task.train_path, nrows=max_rows + 1)
     truncated = len(train) > max_rows
     train = train.head(max_rows)
-    test = read_table(task.test_path, max_rows) if task.test_path else None
+    test = read_table(task.test_path, nrows=max_rows) if task.test_path else None
     report = profile(task, train, test, truncated)
     with session(project.db_path) as conn, transaction(conn):
         conn.execute(
@@ -201,7 +203,8 @@ def run_experiment(workspace: Workspace, project: Project, experiment_id: str) -
     seed = int(experiment.card.get("seed", workspace.config.get("evaluation", "seed")))
     workdir = _prepare_workdir(project, experiment, protocol, seed)
     start_experiment(project.db_path, experiment.id)
-    read_paths = protocol.task.data_paths() + _parent_outputs(project, experiment)
+    read_paths = (protocol.task.data_paths() + [Path(directory) for directory in protocol.task.media_dirs]
+                  + _parent_outputs(project, experiment))
     result = run_in_sandbox(workdir / "script.py", workdir, read_paths, _limits(workspace),
                             workspace.config.get("sandbox", "python"))
     log_event(project.db_path, experiment.id, "resources",
@@ -223,6 +226,9 @@ def run_experiment(workspace: Workspace, project: Project, experiment_id: str) -
     from forge.knowledge import learn_from_decision
 
     learn_from_decision(workspace, project, experiment.id, status, delta)
+    from forge.lessons import record_from_decision
+
+    record_from_decision(workspace, project, experiment.id, status, delta)
     _refresh_report(project)
     return RunOutcome(experiment.id, "completed", status, mean, std, delta, rule)
 
@@ -257,6 +263,9 @@ def _prepare_workdir(project: Project, experiment: Experiment, protocol: Protoco
     task = protocol.task.to_dict()
     for key in ("train_path", "test_path"):
         task[key] = str(Path(task[key]).resolve()) if task[key] else None
+    if task["prediction_sets"]:
+        task["prediction_sets"] = {name: str(Path(path).resolve()) for name, path in task["prediction_sets"].items()}
+    task["media_dirs"] = [str(Path(directory).resolve()) for directory in task["media_dirs"]]
     context = {
         "task": task,
         "folds": protocol.folds,
@@ -264,7 +273,8 @@ def _prepare_workdir(project: Project, experiment: Experiment, protocol: Protoco
         "seed": seed,
         "fold_scheme": protocol.scheme,
         "parent_dir": str(project.path / "experiments" / experiment.parent_id) if experiment.parent_id else None,
-        "outputs": {"oof": "oof.csv", "test": "test_pred.csv", "info": "info.json"},
+        "outputs": {"oof": "oof.csv", "test": "test_pred.csv", "info": "info.json",
+                    "sets": protocol.task.prediction_files()},
     }
     (workdir / "context.json").write_text(json.dumps(context), encoding="utf-8")
     return workdir
@@ -291,7 +301,7 @@ def _score_outputs(workdir: Path, protocol: Protocol) -> list[float]:
         raise ExperimentError(f"oof.csv contient {len(oof)} lignes au lieu de {len(protocol.folds)}.")
     if oof.isna().any().any() or not all(pd.api.types.is_numeric_dtype(oof[c]) for c in oof.columns):
         raise ExperimentError("oof.csv contient des valeurs manquantes ou non numériques.")
-    y = pd.read_csv(task.train_path, usecols=[task.target], low_memory=False)[task.target]
+    y = read_table(task.train_path, usecols=[task.target])[task.target]
     return fold_scores(task, y, oof, protocol.folds)
 
 
@@ -330,7 +340,7 @@ def _second_regime(project: Project, protocol: Protocol, workdir: Path, referenc
     if not reference.is_file() or not (workdir / "oof.csv").is_file():
         return None
     task = protocol.task
-    y = pd.read_csv(task.train_path, usecols=[task.target], low_memory=False)[task.target]
+    y = read_table(task.train_path, usecols=[task.target])[task.target]
     profile = latest_profile(project, dataset_hash(project, task)) or {}
     test_size = profile.get("test_rows") or max(len(y) // 5, 2)
     return simulated_delta(task, y, pd.read_csv(workdir / "oof.csv"), pd.read_csv(reference), protocol.folds, test_size)

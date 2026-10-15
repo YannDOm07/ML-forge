@@ -742,6 +742,9 @@ def _column_profile(profile: dict | None, task: dict) -> dict[str, Any]:
     }
 
 
+SOURCES_SHOWN = 100
+
+
 def build_viewmodel(workspace, project_id: str | None = None) -> dict[str, Any]:
     """Build the complete display-only state consumed by the local UI."""
     from pathlib import Path
@@ -749,16 +752,10 @@ def build_viewmodel(workspace, project_id: str | None = None) -> dict[str, Any]:
 
     from forge.ui import queries
 
+    from forge.ui import details
+
     def platform_name(url: str | None) -> str:
-        parsed = urlsplit(url or "")
-        host = parsed.netloc.lower().removeprefix("www.")
-        if host == "kaggle.com":
-            return "kaggle"
-        if host.endswith("zindi.africa"):
-            return "zindi"
-        if host.endswith("itu.int"):
-            return "itu"
-        return "generic"
+        return details._platform(url) if url else "generic"
 
     projects = queries.list_projects(workspace.global_db)
     selected_id = project_id or (projects[0]["id"] if projects else None)
@@ -777,11 +774,16 @@ def build_viewmodel(workspace, project_id: str | None = None) -> dict[str, Any]:
         "deliverables": {"checklist": [], "wanted": [], "files": [], "submissions": []},
         "memory": {"knowledge": [], "calibration": [], "evidence": []},
         "journal": {"events": [], "network": [], "actions": [], "approvals": [], "compliance": []},
+        "competition": {"facts": [], "pages": [], "repositories": []},
+        "files": {"deliverables": [], "notebooks": [], "derived": [], "documents": []},
+        "project_journal": [],
+        "lessons": {"context": {}, "by_step": {}, "register": {"total": 0}, "chronology": []},
     }
     if selected_id is None:
         return {
             **empty_panels,
             "projects": projects,
+            "portfolio": [],
             "selected_project": None,
             "generated_at": generated_at,
             "focus": {"screen": "overview", "phase": "create", "message": "Créez un projet ML Forge pour commencer."},
@@ -892,6 +894,7 @@ def build_viewmodel(workspace, project_id: str | None = None) -> dict[str, Any]:
         "pending_approvals": [item for item in queries.get_approval_requests(project_db) if item["status"] == "pending"],
         "deadline": facts_by_name.get("deadline", {}).get("value"),
         "recent_experiments": experiment_rows[-5:],
+        "reliability": (_parse_json(protocol.get("reliability_json")) or {}).get("reliable") if protocol else None,
     }
 
     hypotheses = []
@@ -928,6 +931,8 @@ def build_viewmodel(workspace, project_id: str | None = None) -> dict[str, Any]:
         "submissions": queries.get_submissions(project_db),
     }
 
+    # A project may hold tens of thousands of media files: tables first, then the largest, capped.
+    shown = queries.get_data_sources_shown(project_db, SOURCES_SHOWN)
     data = {
         "profile": profile,
         "sources": [
@@ -938,8 +943,10 @@ def build_viewmodel(workspace, project_id: str | None = None) -> dict[str, Any]:
                 "license": source["license"],
                 "sha256": source["sha256"],
             }
-            for source in queries.get_data_sources(project_db)
+            for source in shown
         ],
+        "sources_total": queries.get_data_source_version(project_db)[0],
+        "summary": details.data_summary(project_db, task),
         "facts": facts,
     }
     memory = {
@@ -978,11 +985,21 @@ def build_viewmodel(workspace, project_id: str | None = None) -> dict[str, Any]:
         phase, message = "campaign_prepare", "Préparez le protocole de validation avant les expériences."
     elif campaign and campaign["active"]:
         phase, message = "experiment", f"Campagne {campaign['status']} : le tableau se met à jour automatiquement."
+    elif campaign and campaign["status"] == "finished" and (workspace.projects_dir / selected_id / "deliverables").is_dir():
+        phase, message = "livrer", ("Campagne terminée, livrables prêts : vérifiez-les (08 · Livrables), puis "
+                                    "soumettez vous-même. ML Forge ne soumet jamais rien.")
     else:
         phase, message = "campaign", "Le protocole est disponible ; vous pouvez démarrer une campagne."
 
+    project_folder = workspace.projects_dir / selected_id
     return {
         "projects": projects,
+        "portfolio": details.portfolio(workspace, projects),
+        "competition": details.competition(project_db),
+        "files": details.project_files(project_folder),
+        "project_journal": details.project_journal(project_folder),
+        "lessons": details.lessons(workspace, task, {k: v.get("value") for k, v in facts_by_name.items()},
+                                   project.get("competition_url"), (raw_profile or {}).get("rows")),
         "selected_project": selected_id,
         "generated_at": generated_at,
         "focus": {"screen": "overview", "phase": phase, "message": message},
