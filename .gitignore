@@ -5,6 +5,17 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 
-# Données générées localement
+# Configuration locale, générée par `python -m forge init`
+config/mlforge.toml
+# Configuration opencode propre à cette machine (python -m forge setup-opencode)
+opencode.json
+# Données et secrets locaux (jamais versionnés)
+secrets/
+mlforge-data/
+# Documents personnels non publiés
+prompt.docx
+*.pdf
+
+# Données générées localement par le paquet ml_forge
 backups/
 projects/

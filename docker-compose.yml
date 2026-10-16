@@ -1,0 +1,16 @@
+# Usage : docker compose run --rm mlforge <commande>
+#   docker compose run --rm mlforge demo
+#   docker compose run --rm mlforge create "Titanic" --url https://www.kaggle.com/competitions/titanic
+#   docker compose run --rm mlforge campaign start <id>
+# Le jeton Kaggle est monté en lecture seule depuis KAGGLE_DIR (défaut : ./secrets/kaggle, jamais versionné).
+services:
+  mlforge:
+    build: .
+    image: mlforge:1.0.0
+    stdin_open: true
+    volumes:
+      - mlforge-data:/data
+      - ${KAGGLE_DIR:-./secrets/kaggle}:/home/forge/.kaggle:ro
+
+volumes:
+  mlforge-data:

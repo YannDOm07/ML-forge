@@ -1,7 +1,11 @@
+# Versions fixées (voir pyproject.toml). Sous Windows, Smart App Control bloque des versions plus récentes.
+numpy==2.5.2
+scipy==1.16.3
+pandas==2.3.3
+scikit-learn==1.7.2
+# Lecture audio (descripteurs des médias, étape « Calculer »).
+soundfile==0.14.0
+# Paquet ml_forge : serveur MCP, interface de bureau, mesure de la mémoire.
 mcp>=1.9,<2
-numpy>=1.26
-pandas>=2.0
-scikit-learn>=1.4
-pytest>=8.0
 PySide6>=6.6
 psutil>=5.9

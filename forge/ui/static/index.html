@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>ML Forge</title>
+  <link rel="stylesheet" href="static/ui.css">
+  <script src="static/ui.js" defer></script>
+</head>
+<body>
+  <div class="v app-shell">
+    <aside class="side">
+      <div class="brand">
+        <span class="mk" aria-hidden="true">MF</span>
+        <span>ML Forge</span>
+      </div>
+      <label class="project-select" for="project-picker">Projet
+        <select id="project-picker" aria-label="Choisir un projet"></select>
+      </label>
+      <nav id="navigation" class="navigation" aria-label="Navigation principale">
+        <button class="nav-link active" type="button" data-screen="portfolio" aria-current="page">00 · Tous les projets</button>
+        <button class="nav-link" type="button" data-screen="overview" aria-current="false">01 · Vue d'ensemble</button>
+        <button class="nav-link" type="button" data-screen="competition" aria-current="false">02 · Compétition</button>
+        <button class="nav-link" type="button" data-screen="campaign" aria-current="false">03 · Campagne</button>
+        <button class="nav-link" type="button" data-screen="experiments" aria-current="false">04 · Expériences</button>
+        <button class="nav-link" type="button" data-screen="hypotheses" aria-current="false">05 · Hypothèses</button>
+        <button class="nav-link" type="button" data-screen="data" aria-current="false">06 · Données</button>
+        <button class="nav-link" type="button" data-screen="validation" aria-current="false">07 · Validation</button>
+        <button class="nav-link" type="button" data-screen="deliverables" aria-current="false">08 · Livrables</button>
+        <button class="nav-link" type="button" data-screen="lessons" aria-current="false">09 · Leçons</button>
+        <button class="nav-link" type="button" data-screen="memory" aria-current="false">10 · Mémoire</button>
+        <button class="nav-link" type="button" data-screen="journal" aria-current="false">11 · Journal</button>
+      </nav>
+    </aside>
+    <main class="main">
+      <header class="status-bar">
+        <span id="connection-state" class="connection-state">
+          <span class="connection-dot" aria-hidden="true"></span>
+          <span>Connexion…</span>
+        </span>
+        <span id="selected-project-label" class="selected-project-label"></span>
+        <span id="updated-at" class="last-update">Mis à jour —</span>
+      </header>
+      <div id="app-notice" class="notice" role="alert" hidden></div>
+      <div id="empty-state" class="empty-state" hidden>
+        <h1>Aucun projet</h1>
+        <p>Créez un projet avec ML Forge pour commencer à suivre son avancement.</p>
+      </div>
+      <section id="screen" class="workspace-screen" aria-live="polite" aria-busy="true"></section>
+    </main>
+  </div>
+</body>
+</html>
