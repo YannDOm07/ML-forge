@@ -1,0 +1,95 @@
+2026-10-12 11:41:11 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_create_single_project0\projects\projects.db
+2026-10-12 11:41:11 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_create_single_project0\projects\c127494d\project.db
+2026-10-12 11:41:11 | ml_forge | INFO     | Projet créé : Test Project 1 (c127494d)
+2026-10-12 11:41:11 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_create_multiple_projects0\projects\projects.db
+2026-10-12 11:41:11 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_create_multiple_projects0\projects\23278f32\project.db
+2026-10-12 11:41:11 | ml_forge | INFO     | Projet créé : Project 1 (23278f32)
+2026-10-12 11:41:11 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_create_multiple_projects0\projects\a3e1d874\project.db
+2026-10-12 11:41:11 | ml_forge | INFO     | Projet créé : Project 2 (a3e1d874)
+2026-10-12 11:41:11 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_create_multiple_projects0\projects\ec127aa9\project.db
+2026-10-12 11:41:11 | ml_forge | INFO     | Projet créé : Project 3 (ec127aa9)
+2026-10-12 11:41:12 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_project_isolation0\projects\projects.db
+2026-10-12 11:41:12 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_project_isolation0\projects\71852375\project.db
+2026-10-12 11:41:12 | ml_forge | INFO     | Projet créé : Projet A (71852375)
+2026-10-12 11:41:12 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_project_isolation0\projects\59cc8089\project.db
+2026-10-12 11:41:12 | ml_forge | INFO     | Projet créé : Projet B (59cc8089)
+2026-10-12 11:41:12 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_project_isolation0\projects\71852375\project.db
+2026-10-12 11:41:12 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_project_isolation0\projects\71852375\project.db
+2026-10-12 11:41:12 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_project_isolation0\projects\59cc8089\project.db
+2026-10-12 11:41:12 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_project_isolation0\projects\59cc8089\project.db
+2026-10-12 11:41:12 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_persistence_after_restart0\projects\projects.db
+2026-10-12 11:41:12 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_persistence_after_restart0\projects\da1e056b\project.db
+2026-10-12 11:41:12 | ml_forge | INFO     | Projet créé : Persistent Project (da1e056b)
+2026-10-12 11:41:12 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_persistence_after_restart0\projects\da1e056b\project.db
+2026-10-12 11:41:12 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_persistence_after_restart0\projects\projects.db
+2026-10-12 11:41:12 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_open_after_restart0\projects\projects.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_open_after_restart0\projects\9c52daf4\project.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Projet créé : Project to Reopen (9c52daf4)
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_open_after_restart0\projects\9c52daf4\project.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_open_after_restart0\projects\9c52daf4\project.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_open_after_restart0\projects\projects.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_open_after_restart0\projects\projects.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_open_after_restart0\projects\9c52daf4\project.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_open_after_restart0\projects\9c52daf4\project.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_archive_project0\projects\projects.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_archive_project0\projects\6d187bf4\project.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Projet créé : Project to Archive (6d187bf4)
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_delete_project_requires_c0\projects\projects.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_delete_project_requires_c0\projects\e5134fe8\project.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Projet créé : Project to Delete (e5134fe8)
+2026-10-12 11:41:13 | ml_forge | WARNING  | Suppression de e5134fe8 refusée : confirmation manquante
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_add_experiment0\projects\projects.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_add_experiment0\projects\205f9242\project.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Projet créé : Experiment Project (205f9242)
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_add_experiment0\projects\205f9242\project.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_add_experiment0\projects\205f9242\project.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Expérience créée : d311a74b
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_experiment_persistence0\projects\projects.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_experiment_persistence0\projects\68feb0a8\project.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Projet créé : Exp Project (68feb0a8)
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_experiment_persistence0\projects\68feb0a8\project.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_experiment_persistence0\projects\68feb0a8\project.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Expérience créée : eb689bc3
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_experiment_persistence0\projects\projects.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_experiment_persistence0\projects\68feb0a8\project.db
+2026-10-12 11:41:13 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_experiment_persistence0\projects\68feb0a8\project.db
+2026-10-12 11:41:14 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_transaction_rollback0\projects\projects.db
+2026-10-12 11:41:14 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_transaction_rollback0\projects\f4d3936d\project.db
+2026-10-12 11:41:14 | ml_forge | INFO     | Projet créé : Test DB Integrity (f4d3936d)
+2026-10-12 11:41:14 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_transaction_rollback0\projects\f4d3936d\project.db
+2026-10-12 11:41:14 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_transaction_rollback0\projects\f4d3936d\project.db
+2026-10-12 11:41:14 | ml_forge | INFO     | Expérience créée : 47c0698a
+2026-10-12 11:41:14 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_backup_and_restore0\projects\projects.db
+2026-10-12 11:41:14 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_backup_and_restore0\projects\8b019544\project.db
+2026-10-12 11:41:14 | ml_forge | INFO     | Projet créé : Backup Test (8b019544)
+2026-10-12 11:41:14 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_backup_and_restore0\projects\8b019544\project.db
+2026-10-12 11:41:14 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_backup_and_restore0\projects\8b019544\project.db
+2026-10-12 11:41:14 | ml_forge | INFO     | Expérience créée : 13ac2544
+2026-10-12 11:41:14 | ml_forge | INFO     | Sauvegarde du projet : C:\DEV\ML FORGE\backups\8b019544_20261012_114114
+2026-10-12 11:41:14 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_backup_and_restore0\projects\245c2858\project.db
+2026-10-12 11:41:14 | ml_forge | INFO     | Projet restauré : 245c2858
+2026-10-12 11:41:14 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_backup_and_restore0\projects\245c2858\project.db
+2026-10-12 11:41:14 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_backup_and_restore0\projects\245c2858\project.db
+2026-10-12 11:41:14 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_update_project_objective0\projects\projects.db
+2026-10-12 11:41:14 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_update_project_objective0\projects\e228b02b\project.db
+2026-10-12 11:41:14 | ml_forge | INFO     | Projet créé : Config Test (e228b02b)
+2026-10-12 11:41:14 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_update_project_objective0\projects\e228b02b\project.db
+2026-10-12 11:41:14 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_update_project_objective0\projects\e228b02b\project.db
+2026-10-12 11:41:14 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_update_project_objective0\projects\e228b02b\project.db
+2026-10-12 11:41:15 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_project_run_baseline_expe0\projects\projects.db
+2026-10-12 11:41:15 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_project_run_baseline_expe0\projects\a2fdda23\project.db
+2026-10-12 11:41:15 | ml_forge | INFO     | Projet créé : Phase 3 Project (a2fdda23)
+2026-10-12 11:41:15 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_project_run_baseline_expe0\projects\a2fdda23\project.db
+2026-10-12 11:41:15 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_project_run_baseline_expe0\projects\a2fdda23\project.db
+2026-10-12 11:41:15 | ml_forge | INFO     | Expérience créée : c38d896d
+2026-10-12 11:41:16 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_project_run_baseline_expe0\projects\projects.db
+2026-10-12 11:41:16 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_project_memory_persists_k0\projects\projects.db
+2026-10-12 11:41:16 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_project_memory_persists_k0\projects\864f2039\project.db
+2026-10-12 11:41:16 | ml_forge | INFO     | Projet créé : Memory Test (864f2039)
+2026-10-12 11:41:16 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_project_memory_persists_k0\projects\864f2039\project.db
+2026-10-12 11:41:16 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_project_memory_persists_k0\projects\864f2039\project.db
+2026-10-12 11:41:16 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_project_build_experiment_0\projects\projects.db
+2026-10-12 11:41:16 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_project_build_experiment_0\projects\d29837de\project.db
+2026-10-12 11:41:16 | ml_forge | INFO     | Projet créé : Planning Test (d29837de)
+2026-10-12 11:41:16 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_project_build_experiment_0\projects\d29837de\project.db
+2026-10-12 11:41:16 | ml_forge | INFO     | Schéma de base de données initialisé : C:\Users\HP\AppData\Local\Temp\pytest-of-HP\pytest-17\test_project_build_experiment_0\projects\d29837de\project.db

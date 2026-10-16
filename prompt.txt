@@ -1,0 +1,621 @@
+# PROJET : ML FORGE — LABORATOIRE DE RECHERCHE ET DE COMPÉTITION MACHINE LEARNING LOCAL
+
+## 1. TON RÔLE
+
+Agis comme un architecte logiciel senior, un ingénieur Machine Learning expérimenté, un ingénieur MLOps et un développeur Python spécialisé dans les systèmes locaux, persistants et reproductibles.
+
+Ta mission est de concevoir puis de développer un logiciel nommé **ML Forge**.
+
+Ne construis pas un simple chatbot, un AutoML superficiel ou un système constitué de nombreux agents qui se parlent sans apporter de valeur réelle.
+
+Construis un véritable laboratoire personnel de Machine Learning capable d'aider son utilisateur à participer à des compétitions techniques, à améliorer ses méthodes de travail, à produire des solutions reproductibles et à capitaliser sur les expériences passées.
+
+Tu dois privilégier la rigueur scientifique, la qualité du code, la sobriété architecturale, la traçabilité et la sécurité.
+
+## 2. OBJECTIF DU PRODUIT
+
+L'utilisateur doit pouvoir fournir un dataset, un objectif de prédiction et, si nécessaire, les consignes d'une compétition.
+
+Le système doit pouvoir :
+
+1. Comprendre le problème et les contraintes.
+2. Inspecter les données et rechercher leurs particularités.
+3. Formuler des hypothèses justifiées.
+4. Proposer et réaliser des expériences ML.
+5. Écrire et exécuter le code Python nécessaire.
+6. Évaluer objectivement les résultats.
+7. Diagnostiquer les erreurs et les limites des modèles.
+8. Sélectionner les expériences suivantes selon leur intérêt attendu et leur coût.
+9. Conserver les résultats, les décisions et les enseignements utiles.
+10. Réutiliser les connaissances pertinentes sur les projets futurs.
+11. Générer une solution finale propre, reproductible et conforme au format demandé.
+12. Expliquer ses décisions de manière synthétique par défaut et détaillée sur demande.
+
+Le système doit privilégier la qualité des expériences plutôt que le nombre de modèles entraînés.
+
+Il doit pouvoir reconnaître qu'une hypothèse est incorrecte, que les informations disponibles sont insuffisantes ou qu'une nouvelle expérience ne justifie pas son coût.
+
+Aucune victoire en compétition ni aucun revenu ne doivent être garantis.
+
+## 3. CONTRAINTES NON NÉGOCIABLES
+
+### 3.1 Fonctionnement local
+
+- Le logiciel doit fonctionner sur le PC de l'utilisateur.
+- Le modèle de langage doit être exécuté localement, par exemple via Ollama.
+- Aucune API d'IA payante ne doit être requise.
+- Les données, les codes, les rapports et les historiques ne doivent pas être envoyés à un service externe.
+- Le système doit pouvoir fonctionner hors ligne après installation des dépendances et des modèles nécessaires.
+- Aucun téléchargement de modèle ou de dataset ne doit être déclenché automatiquement sans information et autorisation de l'utilisateur.
+- Le programme doit détecter les ressources disponibles et adapter ses paramètres à la machine.
+
+Ne suppose pas que le PC possède un GPU dédié. Prévois une configuration CPU uniquement et une adaptation aux GPU compatibles lorsqu'ils existent.
+
+### 3.2 Sobriété
+
+Le logiciel doit rester léger, modulaire et compréhensible.
+
+- Pas de Docker obligatoire.
+- Pas de Kubernetes.
+- Pas de base vectorielle obligatoire.
+- Pas de framework multi-agents lourd sans justification.
+- Pas de duplication des datasets.
+- Pas de génération systématique de rapports, fichiers de code ou notebooks à chaque expérience.
+- Pas de copie des bibliothèques de données dans le dépôt du projet.
+- Pas de sauvegarde automatique de tous les modèles temporaires.
+- Pas de dépendance inutile à un serveur externe.
+
+Préférer un agent principal utilisant des outils Python bien définis.
+
+Les bibliothèques supplémentaires ne doivent être ajoutées que lorsqu'elles répondent à un besoin identifié.
+
+### 3.3 Persistance et isolation
+
+La création d'un projet ne doit jamais supprimer, écraser ou modifier les projets existants.
+
+Chaque projet doit posséder un identifiant unique et un espace indépendant.
+
+Aucune suppression destructive ne doit être automatique.
+
+Toute opération de suppression, de remplacement d'un artefact final ou de modification d'une ressource importante doit être précédée d'une confirmation explicite.
+
+Après fermeture et redémarrage, le système doit retrouver les projets, leurs expériences, leurs connaissances et leurs rapports.
+
+### 3.4 Code maintenable
+
+- Fonctions courtes et responsabilités clairement définies.
+- Typage Python lorsque pertinent.
+- Gestion explicite des erreurs.
+- Configuration séparée du code.
+- Tests automatisés.
+- Dépendances minimales.
+- Logs lisibles.
+- Aucune duplication de logique entre modules.
+- Aucun fichier créé uniquement pour donner l'impression que le système est complet.
+
+Ne crée pas d'abstractions inutiles ni de modules vides pour anticiper des fonctionnalités lointaines.
+
+## 4. ARCHITECTURE LOGIQUE
+
+Organise le logiciel autour des composants suivants.
+
+### A. Interface de commande
+
+Commence par une interface en ligne de commande interactive, simple et lisible.
+
+Elle doit permettre de :
+
+- créer un projet ;
+- lister les projets existants ;
+- ouvrir un projet ;
+- reprendre une session ;
+- définir ou modifier un objectif ;
+- lancer une analyse ;
+- démarrer, arrêter ou reprendre une campagne d'expérimentation ;
+- consulter le meilleur résultat ;
+- consulter l'historique ;
+- interroger la mémoire générale ;
+- demander une explication détaillée ;
+- exporter une solution finale ;
+- consulter la configuration et l'état du système.
+
+Ne construis pas immédiatement une interface graphique complexe. Prévois une architecture qui permettra d'en ajouter une ultérieurement.
+
+### B. Agent orchestrateur
+
+Il est responsable de la planification et des décisions.
+
+Il doit :
+
+- comprendre la demande de l'utilisateur ;
+- détecter les informations manquantes ;
+- consulter les connaissances pertinentes ;
+- construire un plan d'expérimentation ;
+- expliquer brièvement la justification de chaque étape ;
+- sélectionner les outils nécessaires ;
+- interpréter les résultats ;
+- décider de la prochaine expérience ;
+- respecter les budgets et les autorisations ;
+- mettre à jour la mémoire à partir des résultats vérifiés.
+
+L'agent ne doit pas improviser l'état du système. Il doit consulter les résultats enregistrés et les mesures réelles.
+
+### C. Data Engine
+
+Responsabilités :
+
+- inspection des formats et dimensions ;
+- détection des valeurs manquantes et incohérentes ;
+- analyse des distributions ;
+- identification des variables numériques, catégorielles, temporelles et textuelles ;
+- analyse des classes et de leur déséquilibre ;
+- détection des doublons et risques de fuite ;
+- étude des relations entre variables ;
+- vérification de la cible et du protocole de validation ;
+- propositions d'hypothèses à partir des observations.
+
+L'analyse doit être adaptée au problème. Évite de charger intégralement de grands datasets en mémoire si un échantillonnage ou une lecture par blocs suffit.
+
+### D. Code Engine
+
+Il gère le cycle de vie du code expérimental :
+
+- générer ou modifier un script d'expérience ;
+- vérifier sa syntaxe ;
+- vérifier les imports et les entrées ;
+- exécuter le code dans un environnement contrôlé ;
+- récupérer les métriques, erreurs, sorties et ressources consommées ;
+- vérifier la reproductibilité ;
+- enregistrer le code et sa version lorsqu'il constitue une expérience utile.
+
+Le code généré ne doit pas être exécuté directement dans le processus principal de l'application.
+
+Prévoir un environnement d'exécution isolé avec accès limité aux fichiers, limites de temps, limites de mémoire lorsque disponibles et arrêt propre en cas d'échec.
+
+Le code ne doit pas avoir un accès général au système de fichiers ni au réseau.
+
+### E. Experiment Engine
+
+Il exécute les expériences ML.
+
+Pour commencer, privilégie :
+
+- scikit-learn ;
+- pandas ;
+- NumPy ;
+- CatBoost, LightGBM et XGBoost lorsqu'ils sont installés et adaptés ;
+- Optuna pour l'optimisation, lorsque cela apporte une valeur réelle.
+
+Le système doit savoir gérer les tâches de classification, régression et détection d'anomalies en priorité.
+
+L'architecture devra permettre d'ajouter ultérieurement les séries temporelles, le NLP, la vision et d'autres tâches sans réécrire l'ensemble du logiciel.
+
+Ne prétends pas prendre en charge un domaine tant que ses outils, ses validations et ses tests ne sont pas implémentés.
+
+### F. Evaluation Engine
+
+Il est responsable de la fiabilité des conclusions.
+
+Il doit :
+
+- utiliser la métrique officielle lorsqu'une compétition la définit ;
+- choisir une validation cohérente avec les données et les règles ;
+- éviter les fuites entre entraînement et validation ;
+- comparer les expériences avec un protocole comparable ;
+- mesurer la variabilité lorsque cela est pertinent ;
+- analyser les erreurs par classe, groupe ou segment ;
+- examiner les cas mal prédits ;
+- distinguer les gains robustes des fluctuations ;
+- empêcher la sélection finale sur la base du seul jeu de test ;
+- vérifier la conformité des fichiers de soumission.
+
+Chaque résultat doit préciser les données, la version du code, les paramètres et le protocole qui l'ont produit.
+
+### G. Knowledge Engine
+
+Il gère la mémoire commune et la mémoire de chaque projet.
+
+Il ne doit pas considérer une observation isolée comme une vérité universelle.
+
+Chaque connaissance réutilisable doit pouvoir être reliée à ses expériences sources, à son contexte, à ses limites et au degré de confiance accordé.
+
+## 5. ARCHITECTURE DE STOCKAGE
+
+Utilise SQLite comme base de données principale.
+
+Prévois au minimum les entités suivantes :
+
+- projects ;
+- experiments ;
+- experiment_metrics ;
+- hypotheses ;
+- decisions ;
+- knowledge_items ;
+- knowledge_evidence ;
+- artifacts ;
+- execution_events ;
+- configuration_history.
+
+Adapte ce schéma si nécessaire, mais évite les tables redondantes.
+
+Les opérations importantes doivent être transactionnelles. Prévois les migrations de schéma, les sauvegardes et une stratégie de récupération en cas d'arrêt brutal.
+
+### Mémoire du projet
+
+Elle conserve :
+
+- objectif ;
+- données référencées et empreinte de leur version ;
+- consignes de compétition ;
+- stratégie de validation ;
+- hypothèses ;
+- expériences ;
+- métriques ;
+- erreurs ;
+- décisions ;
+- code expérimental retenu ;
+- meilleur candidat ;
+- rapport synthétique.
+
+### Mémoire générale
+
+Elle conserve :
+
+- familles de problèmes rencontrés ;
+- méthodes expérimentées ;
+- résultats et conditions de réussite ;
+- méthodes ayant échoué ;
+- coûts et limites observés ;
+- recommandations à vérifier sur un nouveau dataset ;
+- références vers les expériences qui justifient chaque leçon.
+
+Elle doit pouvoir rechercher des expériences similaires par type de problème, structure des données, métrique, taille du dataset, familles de modèles et caractéristiques pertinentes.
+
+Une méthode qui a réussi sur un projet ne doit pas être appliquée automatiquement à tous les projets.
+
+La mémoire générale doit être enrichie à partir de résultats mesurés, pas seulement de textes générés par le modèle de langage.
+
+## 6. GESTION DES PROJETS
+
+Adopte une structure de stockage organisée, par exemple :
+
+ML-Forge/
+- app/
+- core/
+- engines/
+- storage/
+- tests/
+- config/
+- data/
+- projects/
+- models/
+- backups/
+
+Cette structure est indicative : simplifie-la si cela améliore réellement la maintenabilité.
+
+Chaque projet doit avoir un dossier indépendant, avec un manifeste et une base de données ou un espace de stockage propre.
+
+Le dataset original doit rester à son emplacement initial. Référence-le par un chemin et conserve une empreinte permettant de détecter les changements.
+
+Ne copie un dataset que si l'utilisateur le demande explicitement ou si une copie est techniquement nécessaire et autorisée.
+
+Les projets doivent avoir des identifiants uniques. La création d'un nouveau projet ne doit jamais réinitialiser la mémoire globale.
+
+Prévois les opérations suivantes :
+
+- create ;
+- list ;
+- open ;
+- resume ;
+- archive ;
+- export ;
+- backup ;
+- restore.
+
+L'archivage ne doit pas être une suppression. Les suppressions définitives nécessitent une confirmation explicite.
+
+## 7. MÉTHODE DE RAISONNEMENT EXPÉRIMENTAL
+
+Chaque expérience doit posséder :
+
+1. Une question ou un problème identifié.
+2. Une hypothèse explicite.
+3. Une justification fondée sur les données ou sur une connaissance existante.
+4. Une méthode testable.
+5. Un protocole d'évaluation.
+6. Un budget estimé.
+7. Un résultat mesuré.
+8. Une comparaison avec une référence.
+9. Un diagnostic.
+10. Une conclusion.
+11. Une prochaine action éventuelle.
+
+L'agent doit distinguer les faits observés, les hypothèses, les inférences et les conclusions confirmées.
+
+Il doit pouvoir examiner les propriétés spécifiques du dataset et proposer des approches non standard lorsqu'elles sont justifiées.
+
+Il ne doit pas se limiter à essayer une liste fixe d'algorithmes.
+
+Toute approche originale doit toutefois être testée et comparée à une référence. La sophistication d'une méthode ne constitue pas une preuve de sa supériorité.
+
+Si les informations disponibles ne permettent pas de vérifier une hypothèse, l'agent doit le signaler.
+
+## 8. BOUCLE D'AMÉLIORATION
+
+Implémente une boucle contrôlée :
+
+1. Analyser les données et l'objectif.
+2. Construire une référence.
+3. Consulter la mémoire.
+4. Proposer plusieurs hypothèses pertinentes.
+5. Classer les expériences selon le gain potentiel, le coût, le risque et l'incertitude.
+6. Exécuter l'expérience sélectionnée.
+7. Évaluer et diagnostiquer.
+8. Enregistrer les résultats.
+9. Mettre à jour le meilleur candidat uniquement si les critères de comparaison sont satisfaits.
+10. Transformer les enseignements validés en connaissances réutilisables.
+11. Choisir la prochaine expérience ou arrêter.
+
+Prévois des conditions d'arrêt : budget épuisé, nombre maximal d'essais, absence de gain suffisamment fiable, erreur bloquante ou demande de l'utilisateur.
+
+Le système doit pouvoir reprendre une campagne interrompue sans perdre son historique.
+
+## 9. SUIVI DES EXPÉRIENCES
+
+Chaque expérience doit enregistrer au minimum :
+
+- identifiant unique ;
+- projet ;
+- date et durée ;
+- hypothèse ;
+- version du code ;
+- empreinte des données ;
+- méthode de validation ;
+- paramètres ;
+- features utilisées ;
+- métriques ;
+- statut ;
+- erreurs ;
+- ressources consommées si disponibles ;
+- emplacement des artefacts conservés ;
+- décision prise ;
+- prochaine action.
+
+Le registre des expériences est la source de vérité.
+
+Ne reconstitue jamais des résultats à partir de souvenirs conversationnels lorsqu'ils peuvent être lus dans la base.
+
+Ne remplace jamais silencieusement une expérience passée. Une correction doit créer une nouvelle version ou un nouvel événement traçable.
+
+## 10. POLITIQUE DE FICHIERS
+
+La sobriété est une exigence centrale.
+
+Par défaut, le système doit conserver :
+
+- un manifeste par projet ;
+- une base de données structurée ;
+- un rapport Markdown synthétique mis à jour ;
+- les scripts nécessaires aux expériences conservées ;
+- les artefacts explicitement retenus.
+
+Ne crée pas un nouveau rapport à chaque expérience.
+
+Ne crée pas systématiquement de notebooks.
+
+Ne sauvegarde pas tous les modèles temporaires.
+
+Supprime les fichiers temporaires après vérification que leur conservation n'est pas nécessaire.
+
+Ne supprime jamais automatiquement un artefact final ou une ressource utilisateur.
+
+Prévois une commande permettant de consulter l'espace occupé et les artefacts conservés.
+
+Toute action pouvant modifier ou supprimer une ressource importante doit être contrôlée.
+
+## 11. RAPPORTS ET INTERACTION
+
+Le comportement par défaut doit être synthétique.
+
+Après une expérience, affiche :
+
+- objectif ;
+- méthode ;
+- résultat ;
+- comparaison ;
+- ce qui a fonctionné ;
+- ce qui n'a pas fonctionné ;
+- conclusion ;
+- prochaine action.
+
+Les détails techniques, le code complet, les équations, les visualisations ou les explications approfondies ne doivent être produits que sur demande ou lorsqu'ils sont nécessaires à la compréhension.
+
+L'utilisateur doit pouvoir demander :
+
+- « Explique-moi cette méthode en détail. »
+- « Montre le code utilisé. »
+- « Pourquoi cette expérience a-t-elle échoué ? »
+- « Quelles hypothèses n'ont pas encore été testées ? »
+- « Quelles leçons des projets précédents sont pertinentes ici ? »
+- « Compare ces deux expériences. »
+- « Prépare la soumission finale. »
+- « Résume tout le projet en dix lignes. »
+
+Le rapport doit être mis à jour en place. L'historique détaillé reste dans SQLite.
+
+## 12. CONFIGURATION ET BUDGETS
+
+Centralise les préférences dans un fichier de configuration.
+
+Prévois notamment :
+
+- chemin racine ;
+- modèle local configuré ;
+- limites de mémoire et de temps ;
+- nombre maximal d'expériences ;
+- budget de recherche d'hyperparamètres ;
+- politique de sauvegarde ;
+- niveau de verbosité ;
+- autorisations d'exécution ;
+- politique de conservation des artefacts ;
+- configuration de validation.
+
+Les valeurs doivent être explicites et modifiables.
+
+Détecte les ressources matérielles et propose des paramètres prudents.
+
+Ne télécharge pas automatiquement un modèle de plusieurs gigaoctets. Informe l'utilisateur de sa taille estimée et demande son accord.
+
+Si le modèle local n'est pas disponible, explique clairement la situation. Ne bascule jamais silencieusement vers un service distant.
+
+## 13. SÉCURITÉ ET INTÉGRITÉ DES COMPÉTITIONS
+
+Le code généré doit être exécuté dans un environnement isolé et avec des permissions minimales.
+
+Le système doit :
+
+- limiter l'accès au système de fichiers ;
+- bloquer les accès réseau du code expérimental par défaut ;
+- imposer des limites de temps et de ressources lorsque disponibles ;
+- ne jamais exécuter une commande système arbitraire sans contrôle ;
+- conserver une trace des modifications importantes ;
+- demander une autorisation avant toute action destructive ;
+- ne pas exposer les secrets présents sur le PC ;
+- ne pas contourner les règles d'une compétition ;
+- respecter les restrictions concernant les données externes, les modèles préentraînés et les soumissions.
+
+Si une compétition interdit une technique, le système ne doit pas la proposer comme solution utilisable.
+
+## 14. TECHNOLOGIES À PRIVILÉGIER
+
+Commence avec :
+
+- Python ;
+- SQLite ;
+- Ollama comme option d'exécution du LLM local ;
+- pandas et NumPy ;
+- scikit-learn ;
+- pytest ;
+- Git ;
+- CatBoost, LightGBM, XGBoost et Optuna uniquement lorsque pertinents et installés.
+
+Choisis un modèle local en fonction du matériel réel.
+
+Évite les frameworks multi-agents lourds dans la première version.
+
+N'introduis une nouvelle dépendance que si elle apporte un bénéfice concret, mesurable et justifié.
+
+Le système doit rester utilisable sans GPU dédié pour les expériences compatibles avec les ressources disponibles.
+
+## 15. TESTS ET CRITÈRES D'ACCEPTATION
+
+Le projet n'est pas terminé simplement parce que le code démarre.
+
+Implémente des tests couvrant au minimum les cas suivants :
+
+1. Création de plusieurs projets sans perte des précédents.
+2. Persistance des projets après redémarrage.
+3. Isolation des données et des historiques.
+4. Enregistrement et récupération d'une expérience.
+5. Reprise d'une campagne interrompue.
+6. Gestion d'un dataset manquant ou modifié.
+7. Comparaison de deux expériences selon la même validation.
+8. Détection d'une configuration invalide.
+9. Gestion d'une erreur du modèle de langage.
+10. Blocage des opérations destructives non autorisées.
+11. Absence de création excessive de fichiers.
+12. Reproductibilité d'un petit entraînement de test.
+13. Production d'une soumission dont le format est vérifié.
+14. Absence de dépendance à un service distant pendant l'utilisation locale.
+
+Utilise des datasets synthétiques de petite taille pour les tests automatiques.
+
+N'affirme pas qu'une fonction est terminée si elle n'a pas été implémentée et testée.
+
+## 16. MÉTHODE DE DÉVELOPPEMENT ATTENDUE
+
+Ne génère pas tout le code en une seule réponse.
+
+### Phase 1 — Analyse et conception
+
+Inspecte l'environnement et les fichiers existants s'il y en a.
+
+Présente :
+- les choix d'architecture ;
+- les composants et leurs responsabilités ;
+- le schéma de données ;
+- les dépendances ;
+- les risques ;
+- les hypothèses ;
+- les critères d'acceptation.
+
+Signale les informations matérielles manquantes. Ne suppose pas qu'un GPU est disponible.
+
+### Phase 2 — Fondations
+
+Implémente le stockage, la gestion des projets, la configuration, la journalisation, les sauvegardes et les tests d'isolation.
+
+Valide cette phase avant d'ajouter l'agent.
+
+### Phase 3 — Premier moteur ML
+
+Implémente une chaîne complète sur un petit dataset de test : analyse, référence, validation, métriques, rapport et conservation des résultats.
+
+### Phase 4 — Agent local
+
+Ajoute l'intégration au LLM local, la planification, l'utilisation des outils, la génération contrôlée de code et l'interprétation des résultats.
+
+### Phase 5 — Expérimentation avancée
+
+Ajoute la génération de features, l'optimisation, le diagnostic des erreurs, le choix des prochaines expériences et la mémoire interprojets.
+
+### Phase 6 — Validation finale
+
+Exécute les tests, mesure les ressources consommées, documente les limites et vérifie que les projets sont persistants.
+
+À la fin de chaque phase, indique :
+- ce qui a été implémenté ;
+- les tests exécutés et leurs résultats ;
+- les limites restantes ;
+- les fichiers réellement créés ou modifiés ;
+- la prochaine étape.
+
+Si une décision importante est incertaine, propose les options et explique le compromis avant d'ajouter de la complexité.
+
+## 17. LIVRABLE FINAL
+
+Je veux un logiciel fonctionnel, pas uniquement un prototype de démonstration.
+
+Fournis :
+
+- le code source ;
+- une architecture documentée ;
+- les instructions d'installation locale ;
+- une configuration par défaut prudente ;
+- les tests ;
+- un exemple de projet ;
+- une démonstration reproductible ;
+- une explication de la mémoire et de la traçabilité ;
+- les commandes disponibles ;
+- une procédure de sauvegarde et de restauration ;
+- les limites connues et les extensions possibles.
+
+La documentation doit rester concise et utile.
+
+Ne prétends pas que le système apprend automatiquement de façon générale si son mécanisme réel est uniquement l'enregistrement de résultats. Explique précisément ce qui est mémorisé, comment ces connaissances sont récupérées et comment elles influencent les prochaines décisions.
+
+## 18. TA PRIORITÉ ABSOLUE
+
+Construis un système cohérent, léger, fiable et extensible.
+
+La priorité est d'obtenir un cycle expérimental de qualité, une mémoire persistante et une traçabilité complète avant d'ajouter des fonctionnalités sophistiquées.
+
+Chaque composant doit avoir une raison d'exister.
+
+Chaque expérience doit produire une information exploitable.
+
+Chaque conclusion doit être reliée à des preuves.
+
+Chaque nouveau projet doit bénéficier des connaissances pertinentes accumulées sans perdre son indépendance.
+
+Commence par la phase 1 : analyse et conception. Présente-moi l'architecture proposée et les compromis avant de commencer l'implémentation. Ne génère pas immédiatement tout le code.

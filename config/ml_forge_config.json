@@ -1,0 +1,15 @@
+{
+  "llm_model": "opencode",
+  "max_experiments": 50,
+  "hyperparameter_budget": 20,
+  "memory_limit_gb": 2.720609664916992,
+  "timeout_seconds": 3600,
+  "auto_download_models": false,
+  "enable_logging": true,
+  "log_level": "INFO",
+  "validation_strategy": "cross_validation",
+  "cv_folds": 5,
+  "test_size": 0.2,
+  "random_state": 42,
+  "artifact_retention": "all"
+}

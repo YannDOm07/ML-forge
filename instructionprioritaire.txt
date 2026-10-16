@@ -1,0 +1,215 @@
+# EXIGENCE PRIORITAIRE — ML FORGE DOIT ÊTRE UNE APPLICATION AUTONOME ET GRAPHIQUE
+
+Cette exigence est prioritaire sur toute instruction antérieure qui prévoit une utilisation quotidienne de ML FORGE au moyen de commandes dans un terminal.
+
+## 1. Objectif utilisateur
+
+Je ne veux pas avoir à lancer des commandes pour utiliser ML FORGE.
+
+Tu dois construire une véritable application de bureau, avec une interface graphique intuitive, qui puisse être lancée comme un logiciel classique depuis Windows.
+
+Je ne veux pas avoir à exécuter manuellement des commandes telles que :
+
+- `python main.py`
+- `python -m ml_forge`
+- `pip install ...`
+- `ollama run ...`
+- `pytest`
+- des commandes de lancement ou de configuration à chaque utilisation.
+
+Ces commandes peuvent être utilisées par toi pendant le développement, les tests et l'installation initiale. Elles ne doivent pas constituer mon workflow quotidien.
+
+## 2. Application de bureau
+
+L'interface graphique devient l'interface principale du produit.
+
+Privilégie une application Python de bureau légère, par exemple avec PySide6, si cette solution est compatible avec l'environnement.
+
+Ne développe pas simultanément plusieurs interfaces concurrentes.
+
+L'application doit comprendre au minimum les écrans suivants :
+
+### A. Tableau de bord
+
+Afficher :
+
+- Les projets récents.
+- Les expériences en cours.
+- Les derniers résultats.
+- Les modèles retenus.
+- Les ressources utilisées.
+- L'état de l'agent.
+- Les prochaines actions recommandées.
+
+### B. Gestion des projets
+
+Permettre de créer, ouvrir, renommer, archiver et consulter des projets par des interactions graphiques.
+
+Chaque projet doit être indépendant et persistant.
+
+Aucun projet existant ne doit être écrasé lorsqu'un nouveau projet est créé.
+
+Toute suppression doit demander une confirmation explicite.
+
+### C. Création d'une expérience ML
+
+Permettre de sélectionner un dataset avec un explorateur de fichiers, de choisir ou confirmer la variable cible, de définir l'objectif et de lancer l'analyse avec un bouton.
+
+L'agent doit ensuite proposer une stratégie et expliquer les actions prévues.
+
+### D. Laboratoire d'expérimentation
+
+Afficher les expériences, leur état, les métriques, les modèles comparés, les hypothèses, les erreurs et les prochaines étapes.
+
+L'utilisateur doit pouvoir arrêter une expérience en cours, consulter les résultats et demander une nouvelle analyse.
+
+### E. Mémoire et connaissances
+
+Permettre de consulter les expériences passées, les hypothèses vérifiées, les échecs connus et les connaissances réutilisables.
+
+### F. Rapports et export
+
+Permettre de consulter le rapport d'un projet, d'exporter un modèle et de générer les fichiers nécessaires à une compétition ou à une mission.
+
+### G. Paramètres
+
+Permettre de configurer graphiquement :
+
+- Le modèle local.
+- Le mode sans LLM.
+- Les budgets de calcul.
+- Les limites de mémoire et de durée.
+- Le nombre maximal d'expériences simultanées.
+- Le stockage.
+- Les autorisations d'exécution.
+- Les paramètres de confidentialité.
+
+Les paramètres doivent être persistants.
+
+## 3. Autonomie de l'agent
+
+Une fois un projet configuré et une expérience autorisée, l'agent doit fonctionner sans intervention constante.
+
+Il doit pouvoir :
+
+1. Analyser les données.
+2. Construire une baseline.
+3. Définir des hypothèses.
+4. Planifier des expériences.
+5. Exécuter les expériences autorisées.
+6. Comparer les résultats.
+7. Diagnostiquer les erreurs.
+8. Sélectionner la prochaine expérience pertinente.
+9. Enregistrer les résultats.
+10. Actualiser le rapport.
+11. S'arrêter lorsque le budget est épuisé ou lorsqu'une décision humaine est nécessaire.
+
+L'agent doit afficher sa progression en temps réel ou à intervalles réguliers.
+
+Il ne doit pas rester bloqué indéfiniment lorsqu'un modèle échoue.
+
+Il doit reprendre proprement après un arrêt lorsque l'état de l'expérience le permet.
+
+## 4. Fonctionnement autonome après installation
+
+Prévois un mécanisme d'installation qui prépare automatiquement les dépendances et les ressources nécessaires.
+
+L'utilisateur ne doit pas devoir installer manuellement chaque bibliothèque Python.
+
+L'installation doit :
+
+- Vérifier l'environnement.
+- Installer les composants nécessaires lorsque cela est autorisé.
+- Préparer l'environnement Python isolé.
+- Initialiser la base SQLite.
+- Créer les répertoires de travail.
+- Vérifier le fonctionnement des composants.
+- Afficher les éventuels problèmes de compatibilité.
+- Préparer les raccourcis de lancement lorsque cela est possible.
+
+Prévois un installateur Windows et un exécutable ou lanceur permettant de démarrer l'application par double-clic.
+
+Évalue les options de packaging, par exemple PyInstaller ou une solution équivalente, après avoir validé l'architecture.
+
+Ne prétends pas que l'installation est totalement automatique si une autorisation administrative, un téléchargement ou une action système reste nécessaire.
+
+## 5. Gestion du LLM local
+
+L'application doit détecter si un modèle local est disponible.
+
+Si aucun modèle compatible n'est présent, elle doit afficher un écran d'installation guidée.
+
+L'utilisateur doit pouvoir choisir un modèle adapté à son ordinateur et voir sa taille approximative avant le téléchargement.
+
+Le téléchargement doit être explicite et afficher sa progression.
+
+Une fois le modèle installé, l'application doit vérifier qu'il fonctionne.
+
+Si le LLM échoue ou est indisponible, l'application doit continuer à offrir les fonctionnalités ML classiques qui ne dépendent pas de lui.
+
+Ne lance pas automatiquement des téléchargements volumineux en arrière-plan.
+
+Ne dépends pas d'un service cloud ou d'une API payante.
+
+## 6. Exécution des expériences
+
+Toutes les expériences doivent être pilotées par l'application.
+
+L'agent doit gérer les processus d'entraînement, les erreurs, les journaux, les budgets et les résultats sans exiger que l'utilisateur ouvre un terminal.
+
+L'interface doit afficher :
+
+- L'expérience en cours.
+- Le temps écoulé.
+- Le budget restant.
+- Les étapes terminées.
+- Les erreurs rencontrées.
+- Les résultats disponibles.
+- Les options d'arrêt et de reprise.
+
+L'exécution de code généré reste soumise aux restrictions de sécurité définies dans le cahier des charges.
+
+L'autonomie ne signifie pas que le LLM dispose d'un accès illimité au système.
+
+## 7. Distinguer autonomie et installation initiale
+
+Je comprends que le développement, le packaging et la première installation peuvent nécessiter des opérations techniques.
+
+Cependant, tu dois automatiser autant que possible ces opérations et documenter clairement celles qui ne peuvent pas l'être.
+
+Après l'installation, mon utilisation normale doit se résumer à :
+
+1. Ouvrir ML FORGE.
+2. Créer ou sélectionner un projet.
+3. Choisir un dataset.
+4. Définir l'objectif.
+5. Lancer l'analyse.
+6. Consulter les résultats.
+
+Je ne dois pas avoir à gérer manuellement les processus Python, les dépendances, les bases de données ou les modèles à chaque session.
+
+## 8. Développement progressif obligatoire
+
+Ne tente pas de construire toute l'interface et tous les moteurs en une seule opération.
+
+Développe dans cet ordre :
+
+1. Vérification de l'environnement et faisabilité du packaging.
+2. Fondations et persistance.
+3. Première interface graphique fonctionnelle.
+4. Gestion des projets.
+5. Importation et analyse des datasets.
+6. Baselines et premiers modèles.
+7. Exécution en arrière-plan et suivi de progression.
+8. Mémoire et historique.
+9. Orchestrateur et LLM local.
+10. Sécurité et gestion des artefacts.
+11. Rapports et exports.
+12. Installation et packaging Windows.
+13. Tests d'acceptation de bout en bout.
+
+Chaque phase doit aboutir à une application réellement testable. Ne remplace pas les fonctionnalités réelles par de simples boutons décoratifs.
+
+Conserve les phases, les critères de validation et les règles de sécurité du cahier des charges principal.
+
+Commence par vérifier la faisabilité de cette application graphique autonome sur mon environnement réel. Présente les choix techniques et les risques avant de commencer l'implémentation.

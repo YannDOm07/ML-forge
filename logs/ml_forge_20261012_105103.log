@@ -1,0 +1,19 @@
+2026-10-12 10:51:03 | ml_forge | INFO     | System: CPU=4 cores, Memory=15.82GB, GPU=False
+2026-10-12 10:51:03 | ml_forge | INFO     | Schéma de base de données initialisé : C:\DEV\ML FORGE\projects\projects.db
+2026-10-12 10:51:04 | ml_forge | INFO     | Schéma de base de données initialisé : C:\DEV\ML FORGE\projects\982cd7d7\project.db
+2026-10-12 10:51:04 | ml_forge | INFO     | Projet créé : Integration Test (982cd7d7)
+2026-10-12 10:51:04 | ml_forge | INFO     | Project created: 982cd7d7
+2026-10-12 10:51:04 | ml_forge | INFO     | Schéma de base de données initialisé : C:\DEV\ML FORGE\projects\982cd7d7\project.db
+2026-10-12 10:51:04 | ml_forge | INFO     | Schéma de base de données initialisé : C:\DEV\ML FORGE\projects\982cd7d7\project.db
+2026-10-12 10:51:04 | ml_forge | INFO     | Schéma de base de données initialisé : C:\DEV\ML FORGE\projects\projects.db
+2026-10-12 10:51:04 | ml_forge | INFO     | Expérience créée : a681aff7
+2026-10-12 10:51:04 | ml_forge | INFO     | Project opened and modified: Integration Test
+2026-10-12 10:51:04 | ml_forge | INFO     | Projects in system: 1
+2026-10-12 10:51:04 | ml_forge | INFO     | Sauvegarde du projet : C:\DEV\ML FORGE\backups\982cd7d7_20261012_105104
+2026-10-12 10:51:04 | ml_forge | INFO     | Schéma de base de données initialisé : C:\DEV\ML FORGE\projects\2c6cbbb9\project.db
+2026-10-12 10:51:04 | ml_forge | INFO     | Projet restauré : 2c6cbbb9
+2026-10-12 10:51:04 | ml_forge | INFO     | Project backed up and restored: 2c6cbbb9
+2026-10-12 10:51:04 | ml_forge | INFO     | Active projects after archiving: 1
+2026-10-12 10:51:04 | ml_forge | INFO     | ============================================================
+2026-10-12 10:51:04 | ml_forge | INFO     | OK - All integration tests passed!
+2026-10-12 10:51:04 | ml_forge | INFO     | ============================================================

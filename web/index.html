@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ML Forge | Laboratoire de données</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="ML Forge, accueil"><span class="brand-mark">MF</span><span>ML FORGE</span></a>
+    <div class="local-status"><span class="status-dot"></span>Environnement local</div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <div class="side-label">ESPACE DE TRAVAIL</div>
+      <button class="nav-item active" type="button"><span class="nav-icon">▦</span>Laboratoire</button>
+      <div class="sidebar-rule"></div>
+      <div class="side-heading"><span>PROJETS</span><span id="project-count">0</span></div>
+      <div id="project-list" class="project-list"><p class="quiet">Chargement des projets...</p></div>
+      <div class="sidebar-note"><span class="status-dot"></span>Vos données restent sur cet ordinateur.</div>
+    </aside>
+
+    <section class="workspace">
+      <div class="page-heading">
+        <div><div class="eyebrow">LABORATOIRE LOCAL / EXPÉRIMENTATION</div><h1>Un objectif clair.<br><span>Des résultats traçables.</span></h1></div>
+        <div class="heading-index">01 <i>/</i> 03</div>
+      </div>
+
+      <section class="workflow" aria-label="Étapes">
+        <div class="workflow-step current"><span>01</span><div>Analyser le lien</div></div>
+        <div class="workflow-line"></div>
+        <div class="workflow-step"><span>02</span><div>Créer le projet</div></div>
+        <div class="workflow-line"></div>
+        <div class="workflow-step"><span>03</span><div>Lancer l'évaluation</div></div>
+      </section>
+
+      <div class="content-grid">
+        <section class="form-panel">
+          <div class="panel-heading"><div><span class="section-number">A / DÉMARRAGE AUTOMATIQUE</span><h2>Donnez le lien du projet</h2></div><span class="required-note">URL publique</span></div>
+          <form id="link-form">
+            <label class="field-label" for="source-link">Page de compétition ou lien vers les données <span>*</span></label>
+            <input id="source-link" name="url" type="url" required placeholder="https://exemple.com/competition/projet">
+            <p class="field-help">ML Forge lit la page, repère un CSV/TSV public, crée le projet et lance une baseline si la cible est reconnaissable. Une page publique ne garantit pas que ses fichiers soient accessibles sans connexion.</p>
+            <div class="authorization-note"><span class="authorization-mark">i</span><span>En cliquant, vous autorisez ML Forge à récupérer cette page publique et les CSV/TSV qui y sont directement liés. Aucun accès privé ou identifiant ne sera demandé.</span></div>
+            <button class="primary-button" type="submit"><span>Analyser le lien et démarrer</span><span aria-hidden="true">↗</span></button>
+            <p id="form-message" class="message" role="status"></p>
+          </form>
+        </section>
+
+        <aside class="right-rail">
+          <section class="data-panel">
+            <div class="panel-heading compact"><div><span class="section-number">B / APERÇU</span><h2>Structure des données</h2></div><span id="data-state" class="state-tag">EN ATTENTE</span></div>
+            <div id="data-preview" class="data-preview empty-preview"><div class="preview-glyph">↗</div><p>Collez un lien public de projet ou de compétition pour commencer.</p></div>
+          </section>
+          <section id="project-detail" class="detail-panel">
+            <div class="panel-heading compact"><div><span class="section-number">C / ÉVALUATION</span><h2>Résultats du projet</h2></div></div>
+            <div id="detail-content" class="empty-results">Créez ou sélectionnez un projet pour commencer.</div>
+          </section>
+              <p class="privacy-note"><span>●</span> Récupération du lien sur demande ; analyse et entraînement locaux.</p>
+        </aside>
+      </div>
+      <footer><span>ML FORGE <span class="footer-divider">/</span> LABORATOIRE EXPÉRIMENTAL</span><span>Les scores sont des estimations, pas une garantie de performance.</span></footer>
+    </section>
+  </main>
+</body>
+</html>
